@@ -1,0 +1,12 @@
+FROM golang:1.18.6 as builder
+
+WORKDIR /workspace
+COPY . . 
+
+RUN make
+
+FROM busybox:latest
+WORKDIR /
+COPY --from=builder /workspace/bin/authproxy /
+
+
