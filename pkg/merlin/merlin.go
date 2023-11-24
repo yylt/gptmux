@@ -252,7 +252,7 @@ func (m *Merlin) Send(prompt string, t pkg.PromptType) (<-chan *pkg.BackResp, er
 	case pkg.TextGpt3:
 		model = "GPT 3"
 	case pkg.Code:
-		model = "codellama/CodeLlama-34b-Instruct-hf"
+		model = "GPT 3"
 	default:
 		return nil, fmt.Errorf("not support prompt type")
 	}
