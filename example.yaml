@@ -1,0 +1,7 @@
+address: "127.0.0.1:7900"
+merlin:
+  authurl: xx
+  appurl: xx
+  users:
+  - name: xx
+    password: xx

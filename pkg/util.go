@@ -2,6 +2,8 @@ package pkg
 
 import (
 	"bytes"
+	"fmt"
+	"net/url"
 	"sync"
 )
 
@@ -21,4 +23,33 @@ func GetBuf() *bytes.Buffer {
 
 func PutBuf(b *bytes.Buffer) {
 	bufpool.Put(b)
+}
+
+func ParseUrl(u string) (*url.URL, error) {
+	appurl, err := url.Parse(u)
+	if err != nil {
+		return nil, err
+	}
+	err = Validurl(appurl)
+	if err != nil {
+		return nil, err
+	}
+	return appurl, nil
+}
+
+func Validurl(u *url.URL) error {
+	if u == nil {
+		return fmt.Errorf("url is null")
+	}
+	if u.Scheme == "" {
+		return fmt.Errorf("url scheme is null")
+	}
+	if u.Host == "" {
+		return fmt.Errorf("url host is null")
+	}
+	return nil
+}
+
+func IsHttp20xCode(num int) bool {
+	return num >= 200 && num <= 299
 }

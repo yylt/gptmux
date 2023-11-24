@@ -1,16 +1,14 @@
 package serve
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
 	"io"
-	"math/rand"
-	"time"
+	"net/http"
+	"sync"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rs/xid"
 	"github.com/yylt/chatmux/pkg"
+	"k8s.io/klog/v2"
 
 	"github.com/gin-contrib/sse"
 )
@@ -19,24 +17,17 @@ type Serve struct {
 	e *gin.Engine
 
 	// cache storage
-	store pkg.Storage
-	bs    []pkg.Backender
+	bk pkg.Backender
+
+	mu sync.RWMutex
+	// model map
+	model map[string]pkg.PromptType
 }
 
-type answerfn func(r io.Reader) error
-
-const (
-	UndefineId string = "undefined"
-)
-
-func NewServe(store pkg.Storage, bes []pkg.Backender) *Serve {
-	r := gin.Default()
-	rand.Seed(time.Now().UnixNano())
-
+func NewServe(bk pkg.Backender) *Serve {
 	s := &Serve{
-		e:     r,
-		store: store,
-		bs:    bes,
+		e:  gin.Default(),
+		bk: bk,
 	}
 	s.probe()
 	return s
@@ -44,119 +35,119 @@ func NewServe(store pkg.Storage, bes []pkg.Backender) *Serve {
 
 func (s *Serve) probe() {
 	group := s.e.Group("/api")
-	group.GET("/conv/:id", s.AnswerList)
-	group.GET("/chat/:id", s.GetAnswer)
-	group.POST("/generate/id", s.GenId)
+
+	group.GET("/chat/:id", s.idchatHandler)
+	group.POST("/generate/id", s.genidHandler)
+
+	v1group := s.e.Group("/v1")
+	v1group.POST("/chat/completions", s.chatHandler) // chatbot ui
+	v1group.GET("/models", s.modelsHandler)          // chatbot ui
 }
 
-func (s *Serve) send(c *gin.Context, id string) (answerfn, error) {
-	// TODO 根据contentType 分流，根据 用户 分流
-
-	back := pkg.PickOne(s.bs, pkg.Text)
-	if back == nil {
-		return nil, fmt.Errorf("not found ava backend")
-	}
-	bucket, _ := s.store.GetBucket(id)
-
-	return func(r io.Reader) error {
-		var (
-			rb, wb = pkg.GetBuf(), pkg.GetBuf()
-		)
-		defer func() {
-			bucket.Set(rb.String(), wb.Bytes(), 24*time.Hour)
-			pkg.PutBuf(rb)
-			pkg.PutBuf(wb)
-		}()
-		read, err := back.SendText(io.TeeReader(r, rb))
-		if err != nil {
-			wb.WriteString("服务端出错")
-			return err
-		}
-		scan := bufio.NewScanner(io.TeeReader(read, wb))
-		scan.Split(bufio.ScanRunes)
-		c.Stream(func(w io.Writer) bool {
-			// Stream message to client from message channel
-			for scan.Scan() {
-				c.SSEvent("message", scan.Text())
-				return true
-			}
-			return false
-		})
-		return nil
-	}, nil
-}
-
-func (s *Serve) GenId(c *gin.Context) {
-	id := xid.New()
-	_, err := s.store.CreateBucket(id.String(), 24*time.Hour)
-	if err != nil {
-		c.AbortWithError(500, err)
-		return
-	}
-	c.JSON(200, NewGeneralResp(200, id.String()))
-}
-
-// 回答提示词，prompt有 query 和 sse 两类来源
-// query 优先级高于 sse 的数据
-func (s *Serve) GetAnswer(c *gin.Context) {
-	var (
-		events []sse.Event
-		err    error
-	)
-	id := c.Param("id")
-	if _, err = s.store.GetBucket(id); err != nil {
-		c.AbortWithError(400, err)
-		return
-	}
-	prompt := c.Query("prompt")
-	if c.ContentType() == "text/event-stream" && prompt == "" {
-		events, err = sse.Decode(c.Request.Body)
-		if err != nil {
-			c.AbortWithError(400, err)
-			return
-		}
-	}
-	fn, err := s.send(c, id)
-	if err != nil {
-		c.AbortWithError(500, err)
-		return
-	}
-	if prompt != "" {
-		err = fn(bytes.NewBufferString(prompt))
-	} else {
-		err = streamData(events, fn)
-	}
-	if err != nil {
-		c.AbortWithError(500, err)
-		return
-	}
-}
-
-// 获取指定id的回答列表信息
-func (s *Serve) AnswerList(c *gin.Context) {
-	id := c.Param("id")
-	buck, err := s.store.GetBucket(id)
-	if err != nil {
-		c.AbortWithError(400, err)
-		return
-	}
-	var (
-		resplist []string
-	)
-	buck.Iter(func(s1, s2 string) bool {
-		resplist = append(resplist, s1, s2)
-		return true
-	})
-	resp := NewListResp(id, "null", resplist...)
-	c.JSON(200, NewGeneralResp(200, resp))
-	return
-}
-
-// block unless error
 func (s *Serve) Run(addr string) error {
 	return s.e.Run(addr)
 }
 
+// not implement
+func (s *Serve) idchatHandler(c *gin.Context) {
+	_ = c.Param("id")
+	c.AbortWithError(http.StatusNotAcceptable, http.ErrNotSupported)
+}
+
+// not implement
+func (s *Serve) genidHandler(c *gin.Context) {
+	c.AbortWithError(http.StatusNotAcceptable, http.ErrNotSupported)
+}
+
+// chat
+func (s *Serve) chatHandler(c *gin.Context) {
+	var (
+		buf     = pkg.GetBuf()
+		err     error
+		message = pkg.ChatReq{}
+	)
+	defer pkg.PutBuf(buf)
+
+	err = c.BindJSON(&message)
+	if err != nil {
+		klog.Error(err)
+		return
+	}
+
+	s.mu.RLock()
+	promptkind, ok := s.model[message.Model]
+	if !ok {
+		err = fmt.Errorf("not support model: %s", message.Model)
+		c.AbortWithError(http.StatusBadRequest, err) //nolint: errcheck
+		return
+	}
+	s.mu.RUnlock()
+
+	for _, msg := range message.Messages {
+		if msg == nil {
+			continue
+		}
+		klog.Infof("chat by %s : %s", msg.Role, msg.Content)
+		buf.WriteString(msg.Content)
+	}
+
+	readch, err := s.bk.Send(buf.String(), promptkind)
+	if err != nil {
+		klog.Error(err)
+		c.AbortWithError(http.StatusInternalServerError, err) //nolint: errcheck
+		return
+	}
+
+	c.Stream(func(w io.Writer) bool {
+		buf.Reset()
+
+		select {
+		case data, ok := <-readch:
+			if !ok {
+				cont := pkg.GetContent(&message, true, data.Err.Error())
+				c.SSEvent("message", cont)
+				return false
+			}
+			if data != nil {
+				if data.Content != "" {
+					buf.WriteString(data.Content)
+				}
+				if data.Err != nil {
+					cont := pkg.GetContent(&message, true, data.Err.Error())
+					c.SSEvent("message", cont)
+					return false
+				}
+			}
+		}
+
+		cont := pkg.GetContent(&message, false, buf.String())
+		c.SSEvent("message", cont)
+		return true
+	})
+
+}
+
+// model list
+func (s *Serve) modelsHandler(c *gin.Context) {
+
+	models := s.bk.Model()
+	var (
+		data = make([]*pkg.Model, len(models))
+	)
+	s.mu.Lock()
+	for i, m := range models {
+		data[i] = pkg.GetModel(m)
+		s.model[data[i].Id] = m
+	}
+	s.mu.Unlock()
+	c.JSON(200, map[string]interface{}{
+		"object": "list",
+		"data":   data,
+	})
+}
+
+// sse event into io.reader
+// io.reader consumed by user define function
 func streamData(evs []sse.Event, fn func(io.Reader) error) error {
 	buf := pkg.GetBuf()
 	for _, ev := range evs {
