@@ -6,7 +6,8 @@ import (
 	"context"
 	"errors"
 	"io"
-	"time"
+
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -18,16 +19,11 @@ var (
 
 // Event holds all of the event source fields
 type Event struct {
-	timestamp time.Time
-	ID        []byte
-	Data      []byte
-	Event     []byte
-	Retry     []byte
-	Comment   []byte
-}
-
-func (e *Event) hasContent() bool {
-	return len(e.ID) > 0 || len(e.Data) > 0 || len(e.Event) > 0 || len(e.Retry) > 0
+	ID      []byte
+	Data    []byte
+	Event   []byte
+	Retry   []byte
+	Comment []byte
 }
 
 // EventStreamReader scans an io.Reader looking for EventStream messages.
@@ -45,7 +41,7 @@ func NewEventStreamReader(eventStream io.Reader, maxBufferSize int) *EventStream
 		if atEOF && len(data) == 0 {
 			return 0, nil, nil
 		}
-
+		klog.Infof("data: %s", data)
 		// We have a full event payload to parse.
 		if i, nlen := containsDoubleNewline(data); i >= 0 {
 			return i + nlen, data[0:i], nil
@@ -122,7 +118,7 @@ func StartLoop(r io.Reader) (chan *Event, chan error) {
 }
 
 func startReadLoop(reader *EventStreamReader) (chan *Event, chan error) {
-	outCh := make(chan *Event, 8)
+	outCh := make(chan *Event)
 	erChan := make(chan error)
 	go readLoop(reader, outCh, erChan)
 	return outCh, erChan
@@ -141,7 +137,7 @@ func readLoop(reader *EventStreamReader, outCh chan *Event, erChan chan error) {
 			erChan <- err
 			return
 		}
-
+		klog.Infof("msg:%s", msg)
 		var e Event
 
 		if len(msg) < 1 {

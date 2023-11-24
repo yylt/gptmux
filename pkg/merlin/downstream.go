@@ -3,7 +3,6 @@ package merlin
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"io"
 
 	"github.com/yylt/chatmux/pkg"
@@ -11,9 +10,8 @@ import (
 )
 
 var (
-	message = []byte("message")
-
-	UnauthErr = errors.New("unauth")
+	messageMsg = []byte("message")
+	dataMsg    = []byte("data:")
 )
 
 type respReadClose struct {
@@ -30,15 +28,15 @@ func (rr *respReadClose) Reader(raw io.ReadCloser) <-chan *pkg.BackResp {
 		schan = make(chan *pkg.BackResp, 4)
 	)
 
-	go func(raw io.ReadCloser, sch chan *pkg.BackResp) {
+	go func(ra io.ReadCloser, sch chan *pkg.BackResp) {
 		var (
-			respData = &merelinResp{}
+			respData = &EventResp{}
 			err      error
 		)
-		evch, errch := pkg.StartLoop(raw)
+		evch, errch := pkg.StartLoop(ra)
 
 		defer func() {
-			raw.Close()
+			ra.Close()
 			close(errch)
 			close(evch)
 			close(sch)
@@ -47,10 +45,12 @@ func (rr *respReadClose) Reader(raw io.ReadCloser) <-chan *pkg.BackResp {
 		for {
 			select {
 			case v, ok := <-evch:
+				klog.Infof("get event data: %v", v)
 				if !ok {
 					return
 				}
-				if !bytes.Equal(v.Event, message) {
+
+				if !bytes.Equal(v.Event, messageMsg) {
 					continue
 				}
 				err = json.Unmarshal(v.Data, &respData)
@@ -59,12 +59,9 @@ func (rr *respReadClose) Reader(raw io.ReadCloser) <-chan *pkg.BackResp {
 					continue
 				}
 
-				evdata, ok := respData.Data.(*eventData)
-				if !ok {
-					klog.Errorf("it is not event data")
-					return
-				}
-				klog.V(2).Infof("read data: %v", evdata)
+				evdata := respData.Data
+
+				klog.Infof("read data: %v", evdata)
 				switch evdata.Type {
 				case string(chunk):
 					sch <- &pkg.BackResp{

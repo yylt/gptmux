@@ -1,7 +1,9 @@
 address: "127.0.0.1:7900"
 merlin:
   authurl: xx
+  authkey: xx
   appurl: xx
+  debug: true
   users:
   - name: xx
     password: xx

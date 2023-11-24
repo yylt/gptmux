@@ -26,8 +26,9 @@ type Serve struct {
 
 func NewServe(bk pkg.Backender) *Serve {
 	s := &Serve{
-		e:  gin.Default(),
-		bk: bk,
+		e:     gin.Default(),
+		bk:    bk,
+		model: make(map[string]pkg.PromptType),
 	}
 	s.probe()
 	return s
@@ -101,22 +102,20 @@ func (s *Serve) chatHandler(c *gin.Context) {
 	c.Stream(func(w io.Writer) bool {
 		buf.Reset()
 
-		select {
-		case data, ok := <-readch:
-			if !ok {
+		data, ok := <-readch
+		if !ok {
+			cont := pkg.GetContent(&message, true, "")
+			c.SSEvent("message", cont)
+			return false
+		}
+		if data != nil {
+			if data.Content != "" {
+				buf.WriteString(data.Content)
+			}
+			if data.Err != nil {
 				cont := pkg.GetContent(&message, true, data.Err.Error())
 				c.SSEvent("message", cont)
 				return false
-			}
-			if data != nil {
-				if data.Content != "" {
-					buf.WriteString(data.Content)
-				}
-				if data.Err != nil {
-					cont := pkg.GetContent(&message, true, data.Err.Error())
-					c.SSEvent("message", cont)
-					return false
-				}
 			}
 		}
 

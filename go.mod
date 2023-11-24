@@ -1,11 +1,12 @@
 module github.com/yylt/chatmux
 
-go 1.20
+go 1.18
 
 require (
 	github.com/gin-contrib/sse v0.1.0
 	github.com/gin-gonic/gin v1.9.0
-	github.com/imroc/req/v3 v3.2.0
+	github.com/google/uuid v1.4.0
+	github.com/imroc/req/v3 v3.10.1
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/klog/v2 v2.110.1
 )
@@ -25,7 +26,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/leodido/go-urn v1.2.1 // indirect
 	github.com/mattn/go-isatty v0.0.17 // indirect
-	github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421 // indirect
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect

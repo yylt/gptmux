@@ -41,13 +41,8 @@ func Validurl(u *url.URL) error {
 	if u == nil {
 		return fmt.Errorf("url is null")
 	}
-	if u.Scheme == "" {
-		return fmt.Errorf("url scheme is null")
-	}
-	if u.Host == "" {
-		return fmt.Errorf("url host is null")
-	}
 	return nil
+
 }
 
 func IsHttp20xCode(num int) bool {

@@ -3,6 +3,8 @@ package merlin
 import (
 	"fmt"
 	"path"
+
+	"github.com/google/uuid"
 )
 
 type eventType string
@@ -19,9 +21,9 @@ type authResp struct {
 	Email   string `json:"email"`
 }
 
-type merelinResp struct {
-	Status string      `json:"status"`
-	Data   interface{} `json:"data"`
+type UserResp struct {
+	Status string    `json:"status"`
+	Data   *UserData `json:"data"`
 }
 
 type UserData struct {
@@ -34,23 +36,34 @@ type Usage struct {
 	Limit int    `json:"limit"`
 }
 
+type EventResp struct {
+	Status string     `json:"status"`
+	Data   *eventData `json:"data"`
+}
+
 type eventData struct {
 	Content string `json:"content,omitempty"`
 	Type    string `json:"eventType"`
 	Usage   *Usage `json:"usage,omitempty"`
 }
 
+type TokenResp struct {
+	Status string     `json:"status"`
+	Data   *tokenData `json:"data"`
+}
 type tokenData struct {
 	Access  string `json:"accessToken"`
 	Refresh string `json:"refreshToken"`
 }
 
 func getStatusUrl(merlinbase string, token string) string {
-	return path.Join(merlinbase, fmt.Sprintf("status?firebaseToken=%s&from=DASHBOARD", token))
+	surl := path.Join(merlinbase, fmt.Sprintf("status?firebaseToken=%s&from=DASHBOARD", token))
+	return "https://" + surl
 }
 
-func getAuth1Url(authbase string) string {
-	return path.Join(authbase)
+func getAuth1Url(authbase string, key string) string {
+	surl := path.Join(authbase, fmt.Sprintf("/v1/accounts:signInWithPassword?key=%s", key))
+	return "https://" + surl
 }
 
 func getAuth1Body(user, pass string) map[string]interface{} {
@@ -63,7 +76,8 @@ func getAuth1Body(user, pass string) map[string]interface{} {
 }
 
 func getAuth2Url(merlinbase string) string {
-	return path.Join(merlinbase, "session/get")
+	surl := path.Join(merlinbase, "session/get")
+	return "https://" + surl
 }
 
 func getAuth2Body(idtoken string) map[string]interface{} {
@@ -73,7 +87,8 @@ func getAuth2Body(idtoken string) map[string]interface{} {
 }
 
 func getContentUrl(merlinbase string) string {
-	return path.Join(merlinbase, "thread?customJWT=true&version=1.1")
+	surl := path.Join(merlinbase, "thread?customJWT=true&version=1.1")
+	return "https://" + surl
 }
 
 func getContentBody(prompt string, model string) map[string]interface{} {
@@ -89,7 +104,7 @@ func getContentBody(prompt string, model string) map[string]interface{} {
 			},
 			"type": "NEW",
 		},
-		"chatId":   "",
+		"chatId":   uuid.New().String(),
 		"language": "CHINESE_SIMPLIFIED",
 		"mode":     "VANILLA_CHAT",
 		"model":    model,
