@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yylt/chatmux/pkg"
@@ -19,8 +18,8 @@ type Serve struct {
 	// cache storage
 	bk pkg.Backender
 
-	mu sync.RWMutex
 	// model map
+	// chatgpt id - local modelname
 	model map[string]pkg.PromptType
 }
 
@@ -29,6 +28,17 @@ func NewServe(bk pkg.Backender) *Serve {
 		e:     gin.Default(),
 		bk:    bk,
 		model: make(map[string]pkg.PromptType),
+	}
+	models := s.bk.Model()
+	var (
+		md = make([]*pkg.Model, len(models))
+	)
+	for i, m := range models {
+		md[i] = pkg.GetModel(m)
+		if md[i] == nil {
+			panic(fmt.Errorf("not found model %v", m))
+		}
+		s.model[md[i].Id] = m
 	}
 	s.probe()
 	return s
@@ -75,14 +85,12 @@ func (s *Serve) chatHandler(c *gin.Context) {
 		return
 	}
 
-	s.mu.RLock()
 	promptkind, ok := s.model[message.Model]
 	if !ok {
 		err = fmt.Errorf("not support model: %s", message.Model)
 		c.AbortWithError(http.StatusBadRequest, err) //nolint: errcheck
 		return
 	}
-	s.mu.RUnlock()
 
 	for _, msg := range message.Messages {
 		if msg == nil {
@@ -129,16 +137,16 @@ func (s *Serve) chatHandler(c *gin.Context) {
 // model list
 func (s *Serve) modelsHandler(c *gin.Context) {
 
-	models := s.bk.Model()
 	var (
-		data = make([]*pkg.Model, len(models))
+		data = make([]*pkg.Model, len(s.model))
+		i    = 0
 	)
-	s.mu.Lock()
-	for i, m := range models {
-		data[i] = pkg.GetModel(m)
-		s.model[data[i].Id] = m
+
+	for _, name := range s.model {
+		data[i] = pkg.GetModel(name)
+		i++
 	}
-	s.mu.Unlock()
+
 	c.JSON(200, map[string]interface{}{
 		"object": "list",
 		"data":   data,

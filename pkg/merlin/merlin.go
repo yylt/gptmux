@@ -29,11 +29,21 @@ var (
 		Transport: http.DefaultTransport,
 	}
 	ErrUnauth = errors.New("unauth")
+
+	supportPrompts = []pkg.PromptType{
+		pkg.TextGpt3,
+		pkg.TextGpt4,
+	}
+	defaultmodel = "claude-instant-1"
 )
 
 type User struct {
 	User     string `yaml:"name"`
 	Password string `yaml:"password"`
+}
+type Model struct {
+	Gpt3 string `yaml:"gpt3"`
+	Gpt4 string `yaml:"gpt4"`
 }
 
 type Config struct {
@@ -42,6 +52,7 @@ type Config struct {
 	Appurl  string  `yaml:"appurl"`
 	Users   []*User `yaml:"users"`
 	Debug   bool    `yaml:"debug"`
+	Model   Model   `yaml:"model,omitempty"`
 }
 
 type cacheUser struct {
@@ -248,11 +259,17 @@ func (m *Merlin) idtoken(u *cacheUser) (string, error) {
 
 func (m *Merlin) Send(prompt string, t pkg.PromptType) (<-chan *pkg.BackResp, error) {
 	var model string
+	model = defaultmodel
 	switch t {
 	case pkg.TextGpt3:
-		model = "GPT 3"
-	case pkg.Code:
-		model = "GPT 3"
+		if m.cfg.Model.Gpt3 != "" {
+			model = m.cfg.Model.Gpt3
+		}
+
+	case pkg.TextGpt4:
+		if m.cfg.Model.Gpt4 != "" {
+			model = m.cfg.Model.Gpt4
+		}
 	default:
 		return nil, fmt.Errorf("not support prompt type")
 	}
@@ -286,10 +303,7 @@ func (m *Merlin) getUser() *cacheUser {
 
 // model
 func (m *Merlin) Model() []pkg.PromptType {
-	return []pkg.PromptType{
-		pkg.TextGpt3,
-		pkg.Code,
-	}
+	return supportPrompts
 }
 
 func (m *Merlin) send(prompt, model string) (<-chan *pkg.BackResp, error) {
