@@ -105,7 +105,7 @@ func getContentBody(prompt string, model string) map[string]interface{} {
 			"type": "NEW",
 		},
 		"chatId":   uuid.New().String(),
-		"language": "CHINESE_SIMPLIFIED",
+		"language": "AUTO",
 		"mode":     "VANILLA_CHAT",
 		"model":    model,
 	}

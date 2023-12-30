@@ -92,13 +92,9 @@ func (s *Serve) chatHandler(c *gin.Context) {
 		return
 	}
 
-	for _, msg := range message.Messages {
-		if msg == nil {
-			continue
-		}
-		klog.Infof("prompt is role(%s): %s", msg.Role, msg.Content)
-	}
-	buf.WriteString(message.Messages[len(message.Messages)-1].Content)
+	msg := message.Messages[len(message.Messages)-1]
+	klog.Infof("role: %s, prompt: %s", msg.Role, msg.Content)
+	buf.WriteString(msg.Content)
 
 	readch, err := s.bk.Send(buf.String(), promptkind)
 	if err != nil {

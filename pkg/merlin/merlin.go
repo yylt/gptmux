@@ -32,6 +32,7 @@ var (
 
 	supportPrompts = []pkg.PromptType{
 		pkg.TextGpt3,
+		pkg.Code,
 		pkg.TextGpt4,
 	}
 	defaultmodel = "claude-instant-1"
@@ -261,7 +262,7 @@ func (m *Merlin) Send(prompt string, t pkg.PromptType) (<-chan *pkg.BackResp, er
 	var model string
 	model = defaultmodel
 	switch t {
-	case pkg.TextGpt3:
+	case pkg.TextGpt3, pkg.Code:
 		if m.cfg.Model.Gpt3 != "" {
 			model = m.cfg.Model.Gpt3
 		}
@@ -282,13 +283,11 @@ func (m *Merlin) getUser() *cacheUser {
 	var (
 		err error
 	)
-
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	// depend on map random
 	for _, v := range m.users {
 		err = m.status(v)
-		klog.Errorf("get status failed: %v", err)
 		if err != nil && err == ErrUnauth {
 			err = m.refresh(v)
 			if err != nil {
