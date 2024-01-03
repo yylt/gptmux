@@ -9,15 +9,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
 	req "github.com/imroc/req/v3"
 	"github.com/yylt/chatmux/pkg"
+	"github.com/yylt/chatmux/pkg/util"
 	"k8s.io/klog/v2"
 )
 
 var _ pkg.Backender = &Merlin{}
+
+type modelfn func(er *EventResp) *pkg.BackResp
 
 var (
 	HeaderDefault = map[string]string{
@@ -29,13 +31,6 @@ var (
 		Transport: http.DefaultTransport,
 	}
 	ErrUnauth = errors.New("unauth")
-
-	supportPrompts = []pkg.PromptType{
-		pkg.TextGpt3,
-		pkg.Code,
-		pkg.TextGpt4,
-	}
-	defaultmodel = "claude-instant-1"
 )
 
 type User struct {
@@ -43,8 +38,9 @@ type User struct {
 	Password string `yaml:"password"`
 }
 type Model struct {
-	Gpt3 string `yaml:"gpt3"`
-	Gpt4 string `yaml:"gpt4"`
+	Gpt3 string `yaml:"gpt3,omitempty"`
+	Gpt4 string `yaml:"gpt4,omitempty"`
+	Img  string `yaml:"image,omitempty"`
 }
 
 type Config struct {
@@ -56,26 +52,6 @@ type Config struct {
 	Model   Model   `yaml:"model,omitempty"`
 }
 
-type cacheUser struct {
-	idtoken     string // status
-	accesstoken string // chat
-	name        string
-	password    string
-	used        int
-	limit       int
-}
-
-func (c *cacheUser) DeepCopy() *cacheUser {
-	return &cacheUser{
-		accesstoken: c.accesstoken,
-		idtoken:     c.idtoken,
-		name:        c.name,
-		password:    c.password,
-		used:        c.used,
-		limit:       c.limit,
-	}
-}
-
 type Merlin struct {
 	cfg *Config
 
@@ -84,73 +60,38 @@ type Merlin struct {
 	authurl *url.URL
 	appurl  *url.URL
 
-	mu sync.RWMutex
-	// user : accesstoken
-	users map[string]*cacheUser
-
-	read *respReadClose
+	instctrl *instCtrl
 }
 
 func NewMerlinIns(cfg *Config) *Merlin {
 	if cfg == nil || cfg.Users == nil {
 		panic("merlin config is invalid, user is null")
 	}
-	appurl, err := pkg.ParseUrl(cfg.Appurl)
+	appurl, err := util.ParseUrl(cfg.Appurl)
 	if err != nil {
 		panic(err)
 	}
-	authurl, err := pkg.ParseUrl(cfg.Appurl)
+	authurl, err := util.ParseUrl(cfg.Appurl)
 	if err != nil {
 		panic(err)
-	}
-	cli := req.NewClient()
-	if cfg.Debug {
-		cli.DebugLog = true
-		cli = cli.EnableDumpAll()
 	}
 
 	ml := &Merlin{
+		cli:     req.NewClient(),
 		cfg:     cfg,
-		cli:     cli,
 		authurl: authurl,
 		appurl:  appurl,
-		read:    NewRespRead(),
-		users:   map[string]*cacheUser{},
 	}
-	go ml.run()
+	ml.instctrl = NewInstControl(time.Minute*55, ml, cfg.Users)
+
+	if cfg.Debug {
+		ml.cli = ml.cli.EnableDebugLog()
+	}
 	return ml
 }
 
-// check users, and refresh token when forbidden
-func (m *Merlin) run() {
-	var interval = time.Minute * 37 // TODO
-	for {
-		m.mu.Lock()
-		for _, user := range m.cfg.Users {
-			v, ok := m.users[user.User]
-			if !ok {
-				m.users[user.User] = &cacheUser{
-					name:     user.User,
-					password: user.Password,
-				}
-				v = m.users[user.User]
-			}
-			if v.accesstoken != "" && m.status(v) == nil {
-				continue
-			}
-			err := m.refresh(v)
-			if err != nil {
-				klog.Errorf("user(%s/%s) could not get merlin access: %v", user.User, user.Password, err)
-			}
-		}
-		m.mu.Unlock()
-
-		<-time.NewTicker(interval).C
-	}
-}
-
 // check token or update
-func (m *Merlin) refresh(v *cacheUser) error {
+func (m *Merlin) refresh(v *instance) error {
 	err := m.access(v)
 	if err != nil {
 		klog.Errorf("get merlin access token failed: %v", err)
@@ -161,7 +102,7 @@ func (m *Merlin) refresh(v *cacheUser) error {
 
 // get status and update cache.
 // return error
-func (m *Merlin) status(cache *cacheUser) error {
+func (m *Merlin) status(cache *instance) error {
 	resp, err := m.cli.R().
 		SetHeaders(HeaderDefault).
 		SetHeader("accept", "*/*").
@@ -171,14 +112,14 @@ func (m *Merlin) status(cache *cacheUser) error {
 	if err != nil {
 		return err
 	}
-	if !pkg.IsHttp20xCode(resp.StatusCode) {
-		resp.Body.Close()
+	defer resp.Body.Close()
+	if !util.IsHttp20xCode(resp.StatusCode) {
+
 		if resp.StatusCode == http.StatusUnauthorized {
 			return ErrUnauth
 		}
-		return err
+		return fmt.Errorf("status get http code: %v", resp.StatusCode)
 	}
-	resp.Body.Close()
 
 	var (
 		status = UserResp{}
@@ -193,7 +134,7 @@ func (m *Merlin) status(cache *cacheUser) error {
 	return nil
 }
 
-func (m *Merlin) access(u *cacheUser) error {
+func (m *Merlin) access(u *instance) error {
 	idtoken, err := m.idtoken(u)
 	if err != nil {
 		return fmt.Errorf("get id token failed :%v", err)
@@ -211,9 +152,9 @@ func (m *Merlin) access(u *cacheUser) error {
 	}
 	defer resp.Body.Close()
 
-	if !pkg.IsHttp20xCode(resp.StatusCode) {
+	if !util.IsHttp20xCode(resp.StatusCode) {
 		resp.Body.Close()
-		return fmt.Errorf("could not get merlin access token: %s", http.StatusText(resp.StatusCode))
+		return fmt.Errorf("merlin could not get access token: %s", http.StatusText(resp.StatusCode))
 	}
 
 	var (
@@ -229,21 +170,21 @@ func (m *Merlin) access(u *cacheUser) error {
 	return nil
 }
 
-func (m *Merlin) idtoken(u *cacheUser) (string, error) {
+func (m *Merlin) idtoken(u *instance) (string, error) {
 	// idtoken
 	resp, err := m.cli.R().
 		SetHeaders(HeaderDefault).
 		SetHeader("accept", "*/*").
 		SetHeader("content-type", "application/json").
 		SetHeader("authority", m.authurl.Host).
-		SetBody(getAuth1Body(u.name, u.password)).
+		SetBody(getAuth1Body(u.user, u.password)).
 		Post(getAuth1Url(m.cfg.Authurl, m.cfg.Authkey))
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 
-	if !pkg.IsHttp20xCode(resp.StatusCode) {
+	if !util.IsHttp20xCode(resp.StatusCode) {
 		resp.Body.Close()
 		return "", fmt.Errorf("could not get merlin istoken: %s", http.StatusText(resp.StatusCode))
 	}
@@ -258,64 +199,69 @@ func (m *Merlin) idtoken(u *cacheUser) (string, error) {
 	return status.IdToken, nil
 }
 
-func (m *Merlin) Send(prompt string, t pkg.PromptType) (<-chan *pkg.BackResp, error) {
-	var model string
-	model = defaultmodel
+func (m *Merlin) Send(prompt string, t pkg.ChatModel) (<-chan *pkg.BackResp, error) {
+	var (
+		model, url string
+		body       any
+		fn         modelfn = textProcess
+	)
+
+	model = defaultChatModel
 	switch t {
-	case pkg.TextGpt3, pkg.Code:
+	case pkg.GPT3Model, pkg.GPT3PlusModel:
 		if m.cfg.Model.Gpt3 != "" {
 			model = m.cfg.Model.Gpt3
 		}
+		url = getChatUrl(m.cfg.Appurl)
+		body = chatBody(prompt, model)
 
-	case pkg.TextGpt4:
+	case pkg.GPT4Model, pkg.GPT4PlusModel:
 		if m.cfg.Model.Gpt4 != "" {
 			model = m.cfg.Model.Gpt4
 		}
-	default:
-		return nil, fmt.Errorf("not support prompt type")
-	}
+		url = getChatUrl(m.cfg.Appurl)
+		body = chatBody(prompt, model)
+	case pkg.ImgModel:
+		if m.cfg.Model.Img != "" {
+			model = m.cfg.Model.Img
+		} else {
+			model = defaultImageModel
+		}
+		fn = imageProcess
+		url = getImageUrl(m.cfg.Appurl)
+		body = imageBody(prompt, model)
 
-	return m.send(prompt, model)
+	default:
+		return nil, fmt.Errorf("not support prompt type \"%s\"", t)
+	}
+	inst, err := m.getInstance(model)
+	if err != nil {
+		return nil, err
+	}
+	return m.send(inst, url, body, fn)
 }
 
 // check and refresh token
-func (m *Merlin) getUser() *cacheUser {
+func (m *Merlin) getInstance(model string) (*instance, error) {
 	var (
 		err error
 	)
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	// depend on map random
-	for _, v := range m.users {
-		err = m.status(v)
-		if err != nil && err == ErrUnauth {
-			err = m.refresh(v)
-			if err != nil {
-				klog.Errorf("refresh user(%s/%s) failed: %v", v.name, v.password, err)
-				return nil
-			}
-		}
-		return v.DeepCopy()
+	inst, err := m.instctrl.allocate(model)
+	if err != nil {
+		klog.Errorf("merlin get instance failed for model %s: %v", model, err)
+		return nil, err
 	}
-	return nil
+	return inst, err
 }
 
-// model
-func (m *Merlin) Model() []pkg.PromptType {
-	return supportPrompts
-}
+func (m *Merlin) send(cu *instance, url string, body any, datafn func(*EventResp) *pkg.BackResp) (<-chan *pkg.BackResp, error) {
 
-func (m *Merlin) send(prompt, model string) (<-chan *pkg.BackResp, error) {
-	cu := m.getUser()
-	if cu == nil {
-		return nil, fmt.Errorf("there are no valid user")
-	}
-	body, err := json.Marshal(getContentBody(prompt, model))
+	bodystr, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal body failed :%v", err)
 	}
 	// send prompt
-	req, err := http.NewRequest("POST", getContentUrl(m.cfg.Appurl), bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(bodystr))
 	if err != nil {
 		return nil, err
 	}
@@ -325,6 +271,7 @@ func (m *Merlin) send(prompt, model string) (<-chan *pkg.BackResp, error) {
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cu.accesstoken)
+
 	// Add generic headers
 	for k, v := range HeaderDefault {
 		req.Header.Set(k, v)
@@ -350,21 +297,17 @@ func (m *Merlin) send(prompt, model string) (<-chan *pkg.BackResp, error) {
 		for scanner.Scan() {
 			line := scanner.Bytes()
 
-			if !bytes.HasPrefix(line, dataMsg) {
+			if !bytes.HasPrefix(line, dataPrefix) {
 				continue
 			}
-			err = json.Unmarshal(bytes.TrimPrefix(line, dataMsg), &respData)
+			err = json.Unmarshal(bytes.TrimPrefix(line, dataPrefix), &respData)
 			if err != nil {
 				klog.Warningf("parse event data failed: %v", err)
 				continue
 			}
-
-			evdata := respData.Data
-			switch evdata.Type {
-			case string(chunk):
-				sch <- &pkg.BackResp{
-					Content: evdata.Content,
-				}
+			evresp := datafn(respData)
+			if evresp != nil {
+				sch <- evresp
 			}
 		}
 		sch <- &pkg.BackResp{
@@ -375,4 +318,35 @@ func (m *Merlin) send(prompt, model string) (<-chan *pkg.BackResp, error) {
 	}(rsch, resp.Body)
 
 	return rsch, nil
+}
+
+func textProcess(er *EventResp) *pkg.BackResp {
+	if er == nil || er.Data == nil {
+		return nil
+	}
+	switch er.Data.Type {
+	case string(chunk):
+		return &pkg.BackResp{
+			Content: er.Data.Content,
+		}
+	}
+	return nil
+}
+
+func imageProcess(er *EventResp) *pkg.BackResp {
+	if er == nil || er.Data == nil {
+		return nil
+	}
+	switch er.Data.Type {
+	case string(system):
+		if er.Data.Setting != nil || er.Data.Usage != nil {
+			return nil
+		}
+		if len(er.Data.Attachs) != 0 && er.Data.Attachs[0].Url != "" {
+			return &pkg.BackResp{
+				Content: er.Data.Attachs[0].Url,
+			}
+		}
+	}
+	return nil
 }

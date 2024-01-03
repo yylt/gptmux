@@ -7,9 +7,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yylt/chatmux/pkg"
+	"github.com/yylt/chatmux/pkg/util"
 	"k8s.io/klog/v2"
 
-	"github.com/gin-contrib/sse"
+	"unicode/utf8"
+)
+
+var (
+	hua, _ = utf8.DecodeRuneInString("画")
 )
 
 type Serve struct {
@@ -17,28 +22,12 @@ type Serve struct {
 
 	// cache storage
 	bk pkg.Backender
-
-	// model map
-	// chatgpt id - local modelname
-	model map[string]pkg.PromptType
 }
 
 func NewServe(bk pkg.Backender) *Serve {
 	s := &Serve{
-		e:     gin.Default(),
-		bk:    bk,
-		model: make(map[string]pkg.PromptType),
-	}
-	models := s.bk.Model()
-	var (
-		md = make([]*pkg.Model, len(models))
-	)
-	for i, m := range models {
-		md[i] = pkg.GetModel(m)
-		if md[i] == nil {
-			panic(fmt.Errorf("not found model %v", m))
-		}
-		s.model[md[i].Id] = m
+		e:  gin.Default(),
+		bk: bk,
 	}
 	s.probe()
 	return s
@@ -73,11 +62,11 @@ func (s *Serve) genidHandler(c *gin.Context) {
 // chat
 func (s *Serve) chatHandler(c *gin.Context) {
 	var (
-		buf     = pkg.GetBuf()
+		buf     = util.GetBuf()
 		err     error
 		message = pkg.ChatReq{}
 	)
-	defer pkg.PutBuf(buf)
+	defer util.PutBuf(buf)
 
 	err = c.BindJSON(&message)
 	if err != nil {
@@ -85,7 +74,7 @@ func (s *Serve) chatHandler(c *gin.Context) {
 		return
 	}
 
-	promptkind, ok := s.model[message.Model]
+	model, ok := pkg.ModelName(message.Model)
 	if !ok {
 		err = fmt.Errorf("not support model: %s", message.Model)
 		c.AbortWithError(http.StatusBadRequest, err) //nolint: errcheck
@@ -93,10 +82,17 @@ func (s *Serve) chatHandler(c *gin.Context) {
 	}
 
 	msg := message.Messages[len(message.Messages)-1]
-	klog.Infof("role: %s, prompt: %s", msg.Role, msg.Content)
+	klog.Infof("last prompt: %s", msg.Content)
 	buf.WriteString(msg.Content)
 
-	readch, err := s.bk.Send(buf.String(), promptkind)
+	for _, v := range msg.Content {
+		if v == hua {
+			model = pkg.ImgModel
+		}
+		break
+	}
+
+	readch, err := s.bk.Send(buf.String(), model)
 	if err != nil {
 		klog.Error(err)
 		c.AbortWithError(http.StatusInternalServerError, err) //nolint: errcheck
@@ -132,37 +128,8 @@ func (s *Serve) chatHandler(c *gin.Context) {
 
 // model list
 func (s *Serve) modelsHandler(c *gin.Context) {
-
-	var (
-		data = make([]*pkg.Model, len(s.model))
-		i    = 0
-	)
-
-	for _, name := range s.model {
-		data[i] = pkg.GetModel(name)
-		i++
-	}
-
 	c.JSON(200, map[string]interface{}{
 		"object": "list",
-		"data":   data,
+		"data":   pkg.GetModels(),
 	})
-}
-
-// sse event into io.reader
-// io.reader consumed by user define function
-func streamData(evs []sse.Event, fn func(io.Reader) error) error {
-	buf := pkg.GetBuf()
-	for _, ev := range evs {
-		if v, ok := ev.Data.(string); ok {
-			if v != "" && v != "[DONE]" {
-				buf.WriteString(v)
-			}
-		}
-	}
-	defer pkg.PutBuf(buf)
-	if buf.Len() > 0 {
-		return fn(buf)
-	}
-	return io.EOF
 }

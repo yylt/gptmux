@@ -41,10 +41,22 @@ type EventResp struct {
 	Data   *eventData `json:"data"`
 }
 
+type Attachment struct {
+	Id   string `json:"id,omitempty"`
+	Type string `json:"type,omitempty"`
+	Url  string `json:"url"`
+}
+
+type setting struct {
+	Id string `json:"chatId,omitempty"`
+	Ts string `json:"timestamp,omitempty"`
+}
 type eventData struct {
-	Content string `json:"content,omitempty"`
-	Type    string `json:"eventType"`
-	Usage   *Usage `json:"usage,omitempty"`
+	Content string        `json:"content,omitempty"`
+	Attachs []*Attachment `json:"attachments,omitempty"`
+	Type    string        `json:"eventType"`
+	Usage   *Usage        `json:"usage,omitempty"`
+	Setting *setting      `json:"settings,omitempty"`
 }
 
 type TokenResp struct {
@@ -86,12 +98,17 @@ func getAuth2Body(idtoken string) map[string]interface{} {
 	}
 }
 
-func getContentUrl(merlinbase string) string {
+func getChatUrl(merlinbase string) string {
 	surl := path.Join(merlinbase, "thread?customJWT=true&version=1.1")
 	return "https://" + surl
 }
 
-func getContentBody(prompt string, model string) map[string]interface{} {
+func getImageUrl(merlinbase string) string {
+	surl := path.Join(merlinbase, "thread/image-generation?customJWT=true")
+	return "https://" + surl
+}
+
+func chatBody(prompt string, model string) map[string]interface{} {
 	return map[string]interface{}{
 		"action": map[string]interface{}{
 			"message": map[string]interface{}{
@@ -107,6 +124,30 @@ func getContentBody(prompt string, model string) map[string]interface{} {
 		"chatId":   uuid.New().String(),
 		"language": "AUTO",
 		"mode":     "VANILLA_CHAT",
+		"model":    model,
+	}
+}
+
+func imageBody(prompt string, model string) map[string]interface{} {
+	return map[string]interface{}{
+		"action": map[string]interface{}{
+			"message": map[string]interface{}{
+				"content": prompt,
+				"metadata": map[string]interface{}{
+					"context": "",
+				},
+				"parentId": "root",
+				"role":     "user",
+			},
+			"type": "NEW",
+		},
+		"metadata": map[string]interface{}{
+			"aspectRatio": "1:1",
+			"numImages":   1,
+		},
+		"chatId":   uuid.New().String(),
+		"language": "AUTO",
+		"mode":     "IMAGE_CHAT",
 		"model":    model,
 	}
 }

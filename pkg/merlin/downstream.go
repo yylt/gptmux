@@ -6,12 +6,13 @@ import (
 	"io"
 
 	"github.com/yylt/chatmux/pkg"
+	"github.com/yylt/chatmux/pkg/util"
 	"k8s.io/klog/v2"
 )
 
 var (
-	messageMsg = []byte("message")
-	dataMsg    = []byte("data:")
+	messagePrefix = []byte("message")
+	dataPrefix    = []byte("data:")
 )
 
 type respReadClose struct {
@@ -33,7 +34,7 @@ func (rr *respReadClose) Reader(raw io.ReadCloser) <-chan *pkg.BackResp {
 			respData = &EventResp{}
 			err      error
 		)
-		evch, errch := pkg.StartLoop(ra)
+		evch, errch := util.StartLoop(ra)
 
 		defer func() {
 			ra.Close()
@@ -50,7 +51,7 @@ func (rr *respReadClose) Reader(raw io.ReadCloser) <-chan *pkg.BackResp {
 					return
 				}
 
-				if !bytes.Equal(v.Event, messageMsg) {
+				if !bytes.Equal(v.Event, messagePrefix) {
 					continue
 				}
 				err = json.Unmarshal(v.Data, &respData)

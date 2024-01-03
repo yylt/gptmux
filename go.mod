@@ -3,7 +3,7 @@ module github.com/yylt/chatmux
 go 1.18
 
 require (
-	github.com/gin-contrib/sse v0.1.0
+	github.com/emirpasic/gods v1.18.1
 	github.com/gin-gonic/gin v1.9.0
 	github.com/google/uuid v1.4.0
 	github.com/imroc/req/v3 v3.10.1
@@ -14,6 +14,7 @@ require (
 require (
 	github.com/bytedance/sonic v1.8.0 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
+	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-logr/logr v1.3.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect

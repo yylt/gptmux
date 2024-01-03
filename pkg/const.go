@@ -1,13 +1,52 @@
 package pkg
 
-const (
-	GPT3Model     = "gpt-3.5-turbo"
-	GPT3PlusModel = "gpt-35-turbo"
-	GPT4Model     = "gpt-4"
-	GPT4PlusModel = "gpt-4-32k"
+import "strings"
 
-	AssistantRole = "assistant"
+type ChatModel string
+
+const (
+	GPT3Model     ChatModel = "gpt-3.5-turbo"
+	GPT3PlusModel ChatModel = "gpt-35-turbo"
+	GPT4Model     ChatModel = "gpt-4"
+	GPT4PlusModel ChatModel = "gpt-4-32k"
+
+	ImgModel ChatModel = "image"
 )
+
+var (
+	supportModels = []*Model{
+		{
+			Id:     string(GPT3Model),
+			Model:  string(GPT3Model),
+			Object: "model",
+		},
+		{
+			Id:     string(GPT3PlusModel),
+			Model:  string(GPT3PlusModel),
+			Object: "model",
+		},
+		{
+			Id:     string(GPT4Model),
+			Model:  string(GPT4Model),
+			Object: "model",
+		},
+		{
+			Id:     string(GPT4PlusModel),
+			Model:  string(GPT4PlusModel),
+			Object: "model",
+		},
+	}
+)
+
+type Backender interface {
+	// async read
+	Send(prompt string, t ChatModel) (<-chan *BackResp, error)
+}
+
+type BackResp struct {
+	Err     error
+	Content string
+}
 
 type Delta struct {
 	Role    string `json:"role,omitempty"`
@@ -56,34 +95,28 @@ func GetContent(req *ChatReq, finish bool, content string) *ChatResp {
 		resp.Choices = append(resp.Choices, &Choice{
 			Delta: &Delta{
 				Content: content,
-				Role:    AssistantRole,
+				Role:    "assistant",
 			},
 		})
 	}
 	return resp
 }
 
-func GetModel(t PromptType) *Model {
-	switch t {
-	case Code:
-		return &Model{
-			Id:     GPT3Model,
-			Model:  GPT3Model,
-			Object: "model",
-		}
-	case TextGpt3:
-		return &Model{
-			Id:     GPT3PlusModel,
-			Model:  GPT3PlusModel,
-			Object: "model",
-		}
-	case TextGpt4:
-		return &Model{
-			Id:     GPT4Model,
-			Model:  GPT4Model,
-			Object: "model",
-		}
-	default:
-		return nil
+func GetModels() []*Model {
+	return supportModels
+}
+
+func ModelName(m string) (ChatModel, bool) {
+	if strings.HasPrefix(m, "gpt-3") {
+		return GPT3Model, true
 	}
+	if strings.HasPrefix(m, "gpt-4") {
+		return GPT4Model, true
+	}
+	switch m {
+	case string(ImgModel):
+		return ImgModel, true
+
+	}
+	return "", false
 }
