@@ -121,10 +121,9 @@ func chatBody(prompt string, model string) map[string]interface{} {
 			},
 			"type": "NEW",
 		},
-		"chatId":   uuid.New().String(),
-		"language": "AUTO",
-		"mode":     "VANILLA_CHAT",
-		"model":    model,
+		"chatId": uuid.New().String(),
+		"mode":   "VANILLA_CHAT",
+		"model":  model,
 	}
 }
 
@@ -145,9 +144,8 @@ func imageBody(prompt string, model string) map[string]interface{} {
 			"aspectRatio": "1:1",
 			"numImages":   1,
 		},
-		"chatId":   uuid.New().String(),
-		"language": "AUTO",
-		"mode":     "IMAGE_CHAT",
-		"model":    model,
+		"chatId": uuid.New().String(),
+		"mode":   "IMAGE_CHAT",
+		"model":  model,
 	}
 }

@@ -51,7 +51,6 @@ func instCompare(a, b interface{}) int {
 		return 0
 	}
 	return 1
-
 }
 
 type instCtrl struct {

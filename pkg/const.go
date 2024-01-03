@@ -5,7 +5,7 @@ import "strings"
 type ChatModel string
 
 const (
-	GPT3Model     ChatModel = "gpt-3.5-turbo"
+	GPT3Model     ChatModel = "gpt-3.5"
 	GPT3PlusModel ChatModel = "gpt-35-turbo"
 	GPT4Model     ChatModel = "gpt-4"
 	GPT4PlusModel ChatModel = "gpt-4-32k"
