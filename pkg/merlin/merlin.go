@@ -33,6 +33,11 @@ var (
 	ErrUnauth = errors.New("unauth")
 )
 
+type Mode struct {
+	Name  pkg.ChatModel
+	Model string
+}
+
 type User struct {
 	User     string `yaml:"name"`
 	Password string `yaml:"password"`
@@ -201,44 +206,38 @@ func (m *Merlin) idtoken(u *instance) (string, error) {
 
 func (m *Merlin) Send(prompt string, t pkg.ChatModel) (<-chan *pkg.BackResp, error) {
 	var (
-		model, url string
-		body       any
-		fn         modelfn = textProcess
+		body any
+		mode = Mode{
+			Name:  t,
+			Model: defaultChatModel,
+		}
 	)
 
-	model = defaultChatModel
 	switch t {
 	case pkg.GPT3Model, pkg.GPT3PlusModel:
 		if m.cfg.Model.Gpt3 != "" {
-			model = m.cfg.Model.Gpt3
+			mode.Model = m.cfg.Model.Gpt3
 		}
-		url = getChatUrl(m.cfg.Appurl)
-		body = chatBody(prompt, model)
+		body = chatBody(prompt, mode.Model)
 
 	case pkg.GPT4Model, pkg.GPT4PlusModel:
 		if m.cfg.Model.Gpt4 != "" {
-			model = m.cfg.Model.Gpt4
+			mode.Model = m.cfg.Model.Gpt4
 		}
-		url = getChatUrl(m.cfg.Appurl)
-		body = chatBody(prompt, model)
+		body = chatBody(prompt, mode.Model)
 	case pkg.ImgModel:
 		if m.cfg.Model.Img != "" {
-			model = m.cfg.Model.Img
+			mode.Model = m.cfg.Model.Img
 		} else {
-			model = defaultImageModel
+			mode.Model = defaultImageModel
 		}
-		fn = imageProcess
-		url = getImageUrl(m.cfg.Appurl)
-		body = imageBody(prompt, model)
+		body = imageBody(prompt, mode.Model)
 
 	default:
 		return nil, fmt.Errorf("not support prompt type \"%s\"", t)
 	}
-	inst, err := m.getInstance(model)
-	if err != nil {
-		return nil, err
-	}
-	return m.send(inst, url, body, fn)
+
+	return m.send(body, mode)
 }
 
 // check and refresh token
@@ -246,15 +245,41 @@ func (m *Merlin) getInstance(model string) (*instance, error) {
 	var (
 		err error
 	)
-	inst, err := m.instctrl.allocate(model)
+	inst, err := m.instctrl.Dequeue(model)
 	if err != nil {
 		klog.Errorf("merlin get instance failed for model %s: %v", model, err)
 		return nil, err
 	}
+	if m.status(inst) != nil {
+		err = m.refresh(inst)
+		if err != nil {
+			klog.Errorf("merlin refresh instance failed: %v", err)
+			return nil, err
+		}
+	}
 	return inst, err
 }
 
-func (m *Merlin) send(cu *instance, url string, body any, datafn func(*EventResp) *pkg.BackResp) (<-chan *pkg.BackResp, error) {
+func (m *Merlin) send(body any, mod Mode) (<-chan *pkg.BackResp, error) {
+	var (
+		datafn modelfn
+		url    string
+	)
+
+	switch mod.Name {
+	case pkg.ImgModel:
+		datafn = imageProcess
+		url = getImageUrl(m.cfg.Appurl)
+	default:
+		datafn = textProcess
+		url = getChatUrl(m.cfg.Appurl)
+	}
+
+	cu, err := m.getInstance(mod.Model)
+	if err != nil {
+		return nil, err
+	}
+	defer m.instctrl.Eequeue(cu)
 
 	bodystr, err := json.Marshal(body)
 	if err != nil {

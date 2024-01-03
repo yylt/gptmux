@@ -46,11 +46,11 @@ func instCompare(a, b interface{}) int {
 	s1 := a.(*instance)
 	s2 := b.(*instance)
 	if s1.used > s2.used {
-		return -1
+		return 1
 	} else if s1.used == s2.used {
 		return 0
 	}
-	return 1
+	return -1
 }
 
 type instCtrl struct {
@@ -64,10 +64,16 @@ type instCtrl struct {
 func NewInstControl(d time.Duration, ml *Merlin, user []*User) *instCtrl {
 	queue := priorityqueue.NewWith(instCompare)
 	for _, u := range user {
-		queue.Enqueue(&instance{
+		in := &instance{
 			user:     u.User,
 			password: u.Password,
-		})
+		}
+		err := ml.refresh(in)
+		if err != nil {
+			klog.Error(err)
+			continue
+		}
+		queue.Enqueue(in)
 	}
 	ic := &instCtrl{
 		interval: d,
@@ -78,17 +84,22 @@ func NewInstControl(d time.Duration, ml *Merlin, user []*User) *instCtrl {
 	return ic
 }
 
-func (ic *instCtrl) allocate(m string) (*instance, error) {
+func (ic *instCtrl) Eequeue(m *instance) {
+	ic.queue.Enqueue(m)
+}
+
+func (ic *instCtrl) Dequeue(m string) (*instance, error) {
 	cost, ok := modelCost[m]
 	if !ok {
 		return nil, fmt.Errorf("not found model %v", m)
 	}
-	v, ok := ic.queue.Peek()
+	v, ok := ic.queue.Dequeue()
 	if !ok {
 		return nil, fmt.Errorf("not found instance")
 	}
 	inst := v.(*instance)
 	if inst.limit-inst.used < cost {
+		ic.queue.Enqueue(v)
 		return nil, fmt.Errorf("no avaliable token to use")
 	}
 	return inst, nil
@@ -104,6 +115,7 @@ func (ic *instCtrl) run() {
 				continue
 			}
 			if v.accesstoken != "" && ic.ml.status(v) == nil {
+				klog.Infof("user(%s/%s) limit %d used %d.", v.user, v.password, v.limit, v.used)
 				continue
 			}
 			err := ic.ml.refresh(v)
