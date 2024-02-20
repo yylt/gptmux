@@ -354,6 +354,10 @@ func textProcess(er *EventResp) *pkg.BackResp {
 		return &pkg.BackResp{
 			Content: er.Data.Content,
 		}
+	case string(done):
+		return &pkg.BackResp{
+			Err: errors.New("done"),
+		}
 	}
 	return nil
 }

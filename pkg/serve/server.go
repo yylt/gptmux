@@ -83,14 +83,16 @@ func (s *Serve) chatHandler(c *gin.Context) {
 
 	msg := message.Messages[len(message.Messages)-1]
 	klog.Infof("last prompt: %s", msg.Content)
-	buf.WriteString(msg.Content)
-
 	for _, v := range msg.Content {
 		if v == hua {
 			model = pkg.ImgModel
 		}
 		break
 	}
+	if model != pkg.ImgModel {
+		buf.WriteString("使用中文, ")
+	}
+	buf.WriteString(msg.Content)
 
 	readch, err := s.bk.Send(buf.String(), model)
 	if err != nil {
@@ -104,8 +106,7 @@ func (s *Serve) chatHandler(c *gin.Context) {
 
 		data, ok := <-readch
 		if !ok {
-			cont := pkg.GetContent(&message, true, "")
-			c.SSEvent("message", cont)
+			c.SSEvent("message", "[DONE]")
 			return false
 		}
 		if data != nil {
@@ -113,8 +114,7 @@ func (s *Serve) chatHandler(c *gin.Context) {
 				buf.WriteString(data.Content)
 			}
 			if data.Err != nil {
-				cont := pkg.GetContent(&message, true, data.Err.Error())
-				c.SSEvent("message", cont)
+				c.SSEvent("message", "[DONE]")
 				return false
 			}
 		}
@@ -123,7 +123,6 @@ func (s *Serve) chatHandler(c *gin.Context) {
 		c.SSEvent("message", cont)
 		return true
 	})
-
 }
 
 // model list

@@ -9,6 +9,7 @@ import (
 )
 
 var (
+	// not use
 	modelCost = map[string]int{
 		"GPT 3":            1,
 		"GPT 4":            30,
@@ -89,18 +90,16 @@ func (ic *instCtrl) Eequeue(m *instance) {
 }
 
 func (ic *instCtrl) Dequeue(m string) (*instance, error) {
-	cost, ok := modelCost[m]
-	if !ok {
-		return nil, fmt.Errorf("not found model %v", m)
-	}
+
 	v, ok := ic.queue.Dequeue()
 	if !ok {
 		return nil, fmt.Errorf("not found instance")
 	}
 	inst := v.(*instance)
-	if inst.limit-inst.used < cost {
+	// TODO: mostly 10
+	if inst.limit-inst.used < 10 {
 		ic.queue.Enqueue(v)
-		return nil, fmt.Errorf("no avaliable token to use")
+		return nil, fmt.Errorf("no avaliable instance to use")
 	}
 	return inst, nil
 }
