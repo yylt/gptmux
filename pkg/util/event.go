@@ -11,10 +11,10 @@ import (
 )
 
 var (
-	headerID    = []byte("id:")
-	headerData  = []byte("data:")
-	headerEvent = []byte("event:")
-	headerRetry = []byte("retry:")
+	HeaderID    = []byte("id:")
+	HeaderData  = []byte("data:")
+	HeaderEvent = []byte("event:")
+	HeaderRetry = []byte("retry:")
 )
 
 // Event holds all of the event source fields
@@ -149,18 +149,18 @@ func readLoop(reader *EventStreamReader, outCh chan *Event, erChan chan error) {
 		// Split the line by "\n" or "\r", per the spec.
 		for _, line := range bytes.FieldsFunc(msg, func(r rune) bool { return r == '\n' || r == '\r' }) {
 			switch {
-			case bytes.HasPrefix(line, headerID):
-				e.ID = append([]byte(nil), trimHeader(len(headerID), line)...)
-			case bytes.HasPrefix(line, headerData):
+			case bytes.HasPrefix(line, HeaderID):
+				e.ID = append([]byte(nil), trimHeader(len(HeaderID), line)...)
+			case bytes.HasPrefix(line, HeaderData):
 				// The spec allows for multiple data fields per event, concatenated them with "\n".
-				e.Data = append(e.Data[:], append(trimHeader(len(headerData), line), byte('\n'))...)
+				e.Data = append(e.Data[:], append(trimHeader(len(HeaderData), line), byte('\n'))...)
 			// The spec says that a line that simply contains the string "data" should be treated as a data field with an empty body.
-			case bytes.Equal(line, bytes.TrimSuffix(headerData, []byte(":"))):
+			case bytes.Equal(line, bytes.TrimSuffix(HeaderData, []byte(":"))):
 				e.Data = append(e.Data, byte('\n'))
-			case bytes.HasPrefix(line, headerEvent):
-				e.Event = append([]byte(nil), trimHeader(len(headerEvent), line)...)
-			case bytes.HasPrefix(line, headerRetry):
-				e.Retry = append([]byte(nil), trimHeader(len(headerRetry), line)...)
+			case bytes.HasPrefix(line, HeaderEvent):
+				e.Event = append([]byte(nil), trimHeader(len(HeaderEvent), line)...)
+			case bytes.HasPrefix(line, HeaderRetry):
+				e.Retry = append([]byte(nil), trimHeader(len(HeaderRetry), line)...)
 			default:
 				// Ignore any garbage that doesn't match what we're looking for.
 			}

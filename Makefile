@@ -31,8 +31,8 @@ GOVER=$(shell go version | cut -d ' ' -f 3)
 REVERSION=$(shell git rev-parse HEAD)$(shell if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi)
 GIT_BRANCH=$(shell git branch|grep ^\*| cut -d ' ' -f 2)
 
-PKG=github.com/yylt/chatmux
-PACKAGE=github.com/yylt/chatmux/cmd
+PKG=github.com/yylt/gptmux
+PACKAGE=github.com/yylt/gptmux/cmd
 
 GOPATHS=$(shell echo ${GOPATH} | tr ":" "\n" | tr ";" "\n")
 
@@ -42,7 +42,7 @@ GO_GCFLAGS=$(shell				\
 	)
 GO_LDFLAGS=-ldflags '-s -w -X $(PKG)/version.Version=$(COMMIT) -X $(PKG)/version.Goversion=$(GOVER) -X $(PKG)/version.Dirty=$(GIT_DIRTY) -X $(PKG)/version.Branch=$(GIT_BRANCH)'
 
-NAME=chatmux
+NAME=gptmux
 
 BINDIR=bin
 

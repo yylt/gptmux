@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yylt/chatmux/pkg"
-	"github.com/yylt/chatmux/pkg/util"
+	"github.com/yylt/gptmux/pkg"
+	"github.com/yylt/gptmux/pkg/util"
 	"k8s.io/klog/v2"
 
 	"unicode/utf8"
@@ -17,18 +18,48 @@ var (
 	hua, _ = utf8.DecodeRuneInString("画")
 )
 
+type Conf struct {
+	Gpt3 string `yaml:"gpt3,omitempty"`
+	Gpt4 string `yaml:"gpt4,omitempty"`
+	Img  string `yaml:"image,omitempty"`
+}
+
+func (c *Conf) Initial(s *Serve, bks ...pkg.Backender) {
+	var (
+		bkindex = map[string]int{}
+	)
+	for i, v := range bks {
+		bkindex[v.Name()] = i
+	}
+
+	v, ok := bkindex[c.Gpt3]
+	if ok {
+		s.bks[pkg.GPT3Model] = bks[v]
+	}
+
+	v, ok = bkindex[c.Gpt4]
+	if ok {
+		s.bks[pkg.GPT4Model] = bks[v]
+	}
+	v, ok = bkindex[c.Img]
+	if ok {
+		s.bks[pkg.ImgModel] = bks[v]
+	}
+}
+
 type Serve struct {
 	e *gin.Engine
 
-	// cache storage
-	bk pkg.Backender
+	bks map[pkg.ChatModel]pkg.Backender
 }
 
-func NewServe(bk pkg.Backender) *Serve {
+func NewServe() *Serve {
+
 	s := &Serve{
-		e:  gin.Default(),
-		bk: bk,
+		e:   gin.Default(),
+		bks: map[pkg.ChatModel]pkg.Backender{},
 	}
+
 	s.probe()
 	return s
 }
@@ -80,21 +111,31 @@ func (s *Serve) chatHandler(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, err) //nolint: errcheck
 		return
 	}
+	bk, ok := s.bks[model]
+	if !ok {
+		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("not found backend")) //nolint: errcheck
+		return
+	}
 
+	// TODO, last prompt
 	msg := message.Messages[len(message.Messages)-1]
-	klog.Infof("last prompt: %s", msg.Content)
-	for _, v := range msg.Content {
-		if v == hua {
-			model = pkg.ImgModel
+
+	first, _ := utf8.DecodeRuneInString(msg.Content)
+	if first == hua {
+		model = pkg.ImgModel
+	} else {
+		if !unicode.Is(unicode.Han, first) {
+			buf.WriteString("使用中文,")
 		}
-		break
 	}
-	if model != pkg.ImgModel {
-		buf.WriteString("使用中文, ")
-	}
+
 	buf.WriteString(msg.Content)
 
-	readch, err := s.bk.Send(buf.String(), model)
+	bufstr := buf.String()
+
+	klog.Infof("backend: %s, prompt: %s", bk.Name(), bufstr)
+
+	readch, err := bk.Send(bufstr, model)
 	if err != nil {
 		klog.Error(err)
 		c.AbortWithError(http.StatusInternalServerError, err) //nolint: errcheck

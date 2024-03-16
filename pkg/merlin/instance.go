@@ -62,7 +62,7 @@ type instCtrl struct {
 	queue *priorityqueue.Queue
 }
 
-func NewInstControl(d time.Duration, ml *Merlin, user []*User) *instCtrl {
+func NewInstControl(d time.Duration, ml *Merlin, user []*user) *instCtrl {
 	queue := priorityqueue.NewWith(instCompare)
 	for _, u := range user {
 		in := &instance{

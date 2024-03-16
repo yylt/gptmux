@@ -1,4 +1,23 @@
 address: "127.0.0.1:7900"
+claude:
+  chat_id: xx 
+notify:
+  email:
+    name: xx@qq.com
+    password: xx
+    to:
+    - xx@163.com
+  tang: x
+  gnotify:
+    server: x
+    app_id: 2
+    app_token: Ax
+    user: x
+    password: x
+model:
+  gpt3: claude
+  gpt4: claude
+  image: merlin
 merlin:
   authurl: xx
   authkey: xx

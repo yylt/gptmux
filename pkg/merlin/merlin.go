@@ -12,8 +12,8 @@ import (
 	"time"
 
 	req "github.com/imroc/req/v3"
-	"github.com/yylt/chatmux/pkg"
-	"github.com/yylt/chatmux/pkg/util"
+	"github.com/yylt/gptmux/pkg"
+	"github.com/yylt/gptmux/pkg/util"
 	"k8s.io/klog/v2"
 )
 
@@ -31,6 +31,8 @@ var (
 		Transport: http.DefaultTransport,
 	}
 	ErrUnauth = errors.New("unauth")
+
+	MerlinName = "merlin"
 )
 
 type Mode struct {
@@ -38,11 +40,23 @@ type Mode struct {
 	Model string
 }
 
-type User struct {
+type merlinModel struct {
+	// openai
+	name pkg.ChatModel
+
+	// merlin
+	kind string
+
+	url    string
+	datafn modelfn
+}
+
+type user struct {
 	User     string `yaml:"name"`
 	Password string `yaml:"password"`
 }
-type Model struct {
+
+type model struct {
 	Gpt3 string `yaml:"gpt3,omitempty"`
 	Gpt4 string `yaml:"gpt4,omitempty"`
 	Img  string `yaml:"image,omitempty"`
@@ -52,15 +66,19 @@ type Config struct {
 	Authurl string  `yaml:"authurl"`
 	Authkey string  `yaml:"authkey"`
 	Appurl  string  `yaml:"appurl"`
-	Users   []*User `yaml:"users"`
+	Users   []*user `yaml:"users"`
 	Debug   bool    `yaml:"debug"`
-	Model   Model   `yaml:"model,omitempty"`
+	Model   model   `yaml:"model,omitempty"`
 }
 
 type Merlin struct {
 	cfg *Config
 
 	cli *req.Client
+
+	gpt3Model string
+	gpt4Model string
+	imgModel  string
 
 	authurl *url.URL
 	appurl  *url.URL
@@ -82,17 +100,33 @@ func NewMerlinIns(cfg *Config) *Merlin {
 	}
 
 	ml := &Merlin{
-		cli:     req.NewClient(),
-		cfg:     cfg,
-		authurl: authurl,
-		appurl:  appurl,
+		cli:       req.NewClient(),
+		cfg:       cfg,
+		authurl:   authurl,
+		appurl:    appurl,
+		gpt3Model: defaultChatModel,
+		gpt4Model: defaultChatModel,
+		imgModel:  defaultImageModel,
 	}
 	ml.instctrl = NewInstControl(time.Minute*55, ml, cfg.Users)
+	if cfg.Model.Gpt3 != "" {
+		ml.gpt3Model = cfg.Model.Gpt3
+	}
+	if cfg.Model.Gpt4 != "" {
+		ml.gpt4Model = cfg.Model.Gpt4
+	}
+	if cfg.Model.Img != "" {
+		ml.imgModel = cfg.Model.Img
+	}
 
 	if cfg.Debug {
 		ml.cli = ml.cli.EnableDebugLog()
 	}
 	return ml
+}
+
+func (m *Merlin) Name() string {
+	return MerlinName
 }
 
 // check token or update
@@ -207,37 +241,34 @@ func (m *Merlin) idtoken(u *instance) (string, error) {
 func (m *Merlin) Send(prompt string, t pkg.ChatModel) (<-chan *pkg.BackResp, error) {
 	var (
 		body any
-		mode = Mode{
-			Name:  t,
-			Model: defaultChatModel,
+		mm   = &merlinModel{
+			name: t,
 		}
 	)
-
 	switch t {
-	case pkg.GPT3Model, pkg.GPT3PlusModel:
-		if m.cfg.Model.Gpt3 != "" {
-			mode.Model = m.cfg.Model.Gpt3
-		}
-		body = chatBody(prompt, mode.Model)
+	case pkg.GPT3Model:
+		mm.kind = m.gpt3Model
+		mm.url = getChatUrl(m.cfg.Appurl)
+		mm.datafn = textProcess
+		body = chatBody(prompt, m.gpt3Model)
 
-	case pkg.GPT4Model, pkg.GPT4PlusModel:
-		if m.cfg.Model.Gpt4 != "" {
-			mode.Model = m.cfg.Model.Gpt4
-		}
-		body = chatBody(prompt, mode.Model)
+	case pkg.GPT4Model:
+		mm.kind = m.gpt4Model
+		mm.url = getChatUrl(m.cfg.Appurl)
+		mm.datafn = textProcess
+		body = chatBody(prompt, m.gpt4Model)
+
 	case pkg.ImgModel:
-		if m.cfg.Model.Img != "" {
-			mode.Model = m.cfg.Model.Img
-		} else {
-			mode.Model = defaultImageModel
-		}
-		body = imageBody(prompt, mode.Model)
+		mm.kind = m.imgModel
+		mm.url = getImageUrl(m.cfg.Appurl)
+		mm.datafn = imageProcess
+		body = imageBody(prompt, m.imgModel)
 
 	default:
 		return nil, fmt.Errorf("not support prompt type \"%s\"", t)
 	}
 
-	return m.send(body, mode)
+	return m.send(body, mm)
 }
 
 // check and refresh token
@@ -260,22 +291,13 @@ func (m *Merlin) getInstance(model string) (*instance, error) {
 	return inst, err
 }
 
-func (m *Merlin) send(body any, mod Mode) (<-chan *pkg.BackResp, error) {
+func (m *Merlin) send(body any, mm *merlinModel) (<-chan *pkg.BackResp, error) {
 	var (
-		datafn modelfn
-		url    string
+		datafn modelfn = mm.datafn
+		url    string  = mm.url
 	)
 
-	switch mod.Name {
-	case pkg.ImgModel:
-		datafn = imageProcess
-		url = getImageUrl(m.cfg.Appurl)
-	default:
-		datafn = textProcess
-		url = getChatUrl(m.cfg.Appurl)
-	}
-
-	cu, err := m.getInstance(mod.Model)
+	cu, err := m.getInstance(mm.kind)
 	if err != nil {
 		return nil, err
 	}
@@ -322,10 +344,10 @@ func (m *Merlin) send(body any, mod Mode) (<-chan *pkg.BackResp, error) {
 		for scanner.Scan() {
 			line := scanner.Bytes()
 
-			if !bytes.HasPrefix(line, dataPrefix) {
+			if !bytes.HasPrefix(line, util.HeaderData) {
 				continue
 			}
-			err = json.Unmarshal(bytes.TrimPrefix(line, dataPrefix), &respData)
+			err = json.Unmarshal(bytes.TrimPrefix(line, util.HeaderData), &respData)
 			if err != nil {
 				klog.Warningf("parse event data failed: %v", err)
 				continue

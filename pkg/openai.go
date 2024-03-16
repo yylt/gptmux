@@ -13,39 +13,19 @@ const (
 	ImgModel ChatModel = "image"
 )
 
-var (
-	supportModels = []*Model{
-		{
-			Id:     string(GPT3Model),
-			Model:  string(GPT3Model),
-			Object: "model",
-		},
-		{
-			Id:     string(GPT3PlusModel),
-			Model:  string(GPT3PlusModel),
-			Object: "model",
-		},
-		{
-			Id:     string(GPT4Model),
-			Model:  string(GPT4Model),
-			Object: "model",
-		},
-		{
-			Id:     string(GPT4PlusModel),
-			Model:  string(GPT4PlusModel),
-			Object: "model",
-		},
-	}
-)
-
 type Backender interface {
 	// async read
 	Send(prompt string, t ChatModel) (<-chan *BackResp, error)
+
+	// bk name
+	Name() string
 }
 
+// backend response
 type BackResp struct {
 	Err     error
 	Content string
+	Cookie  map[string]string
 }
 
 type Delta struct {
@@ -103,7 +83,28 @@ func GetContent(req *ChatReq, finish bool, content string) *ChatResp {
 }
 
 func GetModels() []*Model {
-	return supportModels
+	return []*Model{
+		{
+			Id:     string(GPT3Model),
+			Model:  string(GPT3Model),
+			Object: "model",
+		},
+		{
+			Id:     string(GPT3PlusModel),
+			Model:  string(GPT3PlusModel),
+			Object: "model",
+		},
+		{
+			Id:     string(GPT4Model),
+			Model:  string(GPT4Model),
+			Object: "model",
+		},
+		{
+			Id:     string(GPT4PlusModel),
+			Model:  string(GPT4PlusModel),
+			Object: "model",
+		},
+	}
 }
 
 func ModelName(m string) (ChatModel, bool) {
