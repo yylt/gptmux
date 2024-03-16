@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"sync"
+	"unsafe"
 )
 
 var (
@@ -35,6 +36,16 @@ func ParseUrl(u string) (*url.URL, error) {
 		return nil, err
 	}
 	return appurl, nil
+}
+
+func Str2bytes(s string) []byte {
+	x := (*[2]uintptr)(unsafe.Pointer(&s))
+	b := [3]uintptr{x[0], x[1], x[1]}
+	return *(*[]byte)(unsafe.Pointer(&b))
+}
+
+func Bytes2str(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
 }
 
 func Validurl(u *url.URL) error {

@@ -45,10 +45,6 @@ func textProcess(er *eventResp) *pkg.BackResp {
 		return &pkg.BackResp{
 			Content: er.Content,
 		}
-	case ping:
-		return &pkg.BackResp{
-			Err: errors.New("done"),
-		}
 	default:
 	}
 	return nil

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	fhttp "github.com/bogdanfinn/fhttp"
@@ -88,12 +89,9 @@ func (c *web) Send(prompt string, t pkg.ChatModel) (<-chan *pkg.BackResp, error)
 
 	buf := util.GetBuf()
 	defer util.PutBuf(buf)
-	bs, err := json.Marshal(map[string]string{"prompt": prompt, "timezone": "Asia/Shanghai"})
-	if err != nil {
-		return nil, err
-	}
 
-	req, err := fhttp.NewRequest(http.MethodPost, address, bytes.NewBuffer(bs))
+	bufread := strings.NewReader(fmt.Sprintf(`{"prompt": "%s", "timezone": "Asia/Shanghai"}`, prompt))
+	req, err := fhttp.NewRequest(http.MethodPost, address, bufread)
 	if err != nil {
 		return nil, err
 	}
@@ -114,11 +112,11 @@ func (c *web) Send(prompt string, t pkg.ChatModel) (<-chan *pkg.BackResp, error)
 	if err != nil {
 		return nil, err
 	}
-	buf.Reset()
+
 	if resp.StatusCode != 200 {
 		buf.ReadFrom(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("could not connect: %s, body: %v", http.StatusText(resp.StatusCode), buf.String())
+		return nil, fmt.Errorf("chat claude failed: %s, body: %v", http.StatusText(resp.StatusCode), buf.String())
 	}
 	var rsch = make(chan *pkg.BackResp, 4)
 	go func(sch chan *pkg.BackResp, body io.ReadCloser) {
@@ -136,7 +134,7 @@ func (c *web) Send(prompt string, t pkg.ChatModel) (<-chan *pkg.BackResp, error)
 			}
 			err = json.Unmarshal(bytes.TrimPrefix(line, util.HeaderData), &respData)
 			if err != nil {
-				klog.Warningf("not want resp struct, event data")
+				klog.Warningf("invalid response data struct: %v", err)
 				continue
 			}
 			evresp := textProcess(respData)
@@ -172,8 +170,7 @@ func (c *web) user(hc []*http.Cookie) (org string, err error) {
 				break
 			}
 		}
-		klog.Infof("orgid is %s", org)
 		return org, nil
 	}
-	return "", fmt.Errorf("failed currentUser, code %d, body: %#v", resp.StatusCode(), resp.Body())
+	return "", fmt.Errorf("failed user request, code: %d, body: %#v", resp.StatusCode(), resp.Body())
 }
