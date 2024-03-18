@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"unicode"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yylt/gptmux/pkg"
@@ -123,13 +123,17 @@ func (s *Serve) chatHandler(c *gin.Context) {
 	first, _ := utf8.DecodeRuneInString(msg.Content)
 	if first == hua {
 		model = pkg.ImgModel
-	} else {
-		if !unicode.Is(unicode.Han, first) {
-			buf.WriteString("使用中文,")
-		}
+	}
+	if !util.HasChineseChar(msg.Content) {
+		buf.WriteString("使用中文,")
 	}
 
-	buf.WriteString(msg.Content)
+	buf.WriteString(strings.Map(func(r rune) rune {
+		if util.IsNewline(r) {
+			return rune(0)
+		}
+		return r
+	}, msg.Content))
 
 	bufstr := buf.String()
 

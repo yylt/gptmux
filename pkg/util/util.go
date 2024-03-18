@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"sync"
+	"unicode"
 	"unsafe"
 )
 
@@ -58,4 +59,18 @@ func Validurl(u *url.URL) error {
 
 func IsHttp20xCode(num int) bool {
 	return num >= 200 && num <= 299
+}
+
+func HasChineseChar(str string) bool {
+	for _, r := range str {
+		if unicode.Is(unicode.Han, r) {
+			return true
+		}
+	}
+	return false
+}
+
+func IsNewline(r rune) bool {
+
+	return r == '\r' || r == '\n'
 }

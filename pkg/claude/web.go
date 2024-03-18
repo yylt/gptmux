@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	fhttp "github.com/bogdanfinn/fhttp"
@@ -89,9 +88,14 @@ func (c *web) Send(prompt string, t pkg.ChatModel) (<-chan *pkg.BackResp, error)
 
 	buf := util.GetBuf()
 	defer util.PutBuf(buf)
-
-	bufread := strings.NewReader(fmt.Sprintf(`{"prompt": "%s", "timezone": "Asia/Shanghai"}`, prompt))
-	req, err := fhttp.NewRequest(http.MethodPost, address, bufread)
+	bs, err := json.Marshal(map[string]any{
+		"prompt":   prompt,
+		"timezone": "Asia/Shanghai",
+	})
+	if err != nil {
+		return nil, err
+	}
+	req, err := fhttp.NewRequest(http.MethodPost, address, bytes.NewReader(bs))
 	if err != nil {
 		return nil, err
 	}
