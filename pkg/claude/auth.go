@@ -74,6 +74,7 @@ func (r *auth) cookie() ([]*http.Cookie, error) {
 		if r.lastupdate.Add(time.Hour * 3).Before(now) {
 			r.b.Push(&box.Message{
 				Title: "require token: " + ClaudeName,
+				Msg:   "更新token",
 			})
 		}
 		return nil, fmt.Errorf("not found token")
