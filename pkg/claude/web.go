@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	fhttp "github.com/bogdanfinn/fhttp"
 	tlsclient "github.com/bogdanfinn/tls-client"
@@ -50,7 +49,6 @@ func New(ctx context.Context, cf *Conf, b box.Box) pkg.Backender {
 	s := &web{
 		chatid: cf.ChatUuid,
 	}
-
 	tr, err := util.NewRoundTripper(
 		// Reference: https://bogdanfinn.gitbook.io/open-source-oasis/tls-client/client-options
 		tlsclient.WithRandomTLSExtensionOrder(), // Chrome 107+
@@ -69,7 +67,7 @@ func New(ctx context.Context, cf *Conf, b box.Box) pkg.Backender {
 		panic(err)
 	}
 	s.orgid, _ = s.user(ck)
-	go s.auth.run(time.Hour)
+	go s.auth.run()
 
 	return s
 }
@@ -152,7 +150,6 @@ func (c *web) Send(prompt string, t pkg.ChatModel) (<-chan *pkg.BackResp, error)
 		close(sch)
 	}(rsch, resp.Body)
 	return rsch, nil
-
 }
 
 func (c *web) user(hc []*http.Cookie) (org string, err error) {
@@ -165,7 +162,7 @@ func (c *web) user(hc []*http.Cookie) (org string, err error) {
 	if err != nil {
 		return "", err
 	}
-	klog.Infof("user request, response: %v", u)
+	klog.Infof("claude user api, response: %v", u)
 	defer resp.RawBody().Close()
 	if util.IsHttp20xCode(resp.StatusCode()) {
 		for _, m := range u.Account.Members {
@@ -176,5 +173,5 @@ func (c *web) user(hc []*http.Cookie) (org string, err error) {
 		}
 		return org, nil
 	}
-	return "", fmt.Errorf("failed user request, code: %d, body: %#v", resp.StatusCode(), resp.Body())
+	return "", fmt.Errorf("failed user api, code: %d, body: %#v", resp.StatusCode(), resp.Body())
 }

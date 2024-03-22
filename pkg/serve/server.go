@@ -71,8 +71,9 @@ func (s *Serve) probe() {
 	group.POST("/generate/id", s.genidHandler)
 
 	v1group := s.e.Group("/v1")
-	v1group.POST("/chat/completions", s.chatHandler) // chatbot ui
-	v1group.GET("/models", s.modelsHandler)          // chatbot ui
+	v1group.POST("/chat/completions", s.chatHandler)    // chatbot ui
+	v1group.OPTIONS("/chat/completions", s.chatHandler) // chatbot ui
+	v1group.GET("/models", s.modelsHandler)             // chatbot ui
 }
 
 func (s *Serve) Run(addr string) error {
@@ -97,8 +98,13 @@ func (s *Serve) chatHandler(c *gin.Context) {
 		err     error
 		message = pkg.ChatReq{}
 	)
+
 	defer util.PutBuf(buf)
 
+	if c.Request.Method == http.MethodOptions {
+		c.AbortWithStatus(200)
+		return
+	}
 	err = c.BindJSON(&message)
 	if err != nil {
 		klog.Error(err)

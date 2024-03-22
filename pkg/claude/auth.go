@@ -14,7 +14,9 @@ import (
 )
 
 const (
-	beforedu  = time.Hour * 3
+	// check and refresh
+	interval = time.Hour * 3
+
 	cookiekey = "sessionKey"
 )
 
@@ -71,7 +73,7 @@ func (r *auth) cookie() ([]*http.Cookie, error) {
 	}
 	// not found
 	if code == "" {
-		if r.lastupdate.Add(time.Hour * 3).Before(now) {
+		if r.lastupdate.Add(interval).Before(now) {
 			r.b.Push(&box.Message{
 				Title: "require token: " + ClaudeName,
 				Msg:   "更新token",
@@ -89,16 +91,14 @@ func (r *auth) cookie() ([]*http.Cookie, error) {
 	return r.hcs, nil
 }
 
-func (r *auth) run(duration time.Duration) {
-	var du = time.NewTimer(duration)
+func (r *auth) run() {
 	for {
 		select {
-		case <-du.C:
+		case <-time.NewTimer(interval).C:
 			r.cookie()
 		case <-r.ctx.Done():
 			return
 		}
-
 	}
 }
 

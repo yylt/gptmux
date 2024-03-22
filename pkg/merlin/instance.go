@@ -120,8 +120,6 @@ func (ic *instCtrl) run() {
 			err := ic.ml.refresh(v)
 			if err != nil {
 				klog.Errorf("merlin user(%s/%s) login failed: %v", v.user, v.password, err)
-			} else {
-				klog.Infof("user(%s/%s) limit %d used %d.", v.user, v.password, v.limit, v.used)
 			}
 		}
 
