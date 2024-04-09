@@ -54,6 +54,19 @@ binary:
 	@echo "bin: ${PACKAGE} "
 	@echo "git commit: ${COMMIT}; goversion: ${GOVER}"
 	@echo "git branch: ${GIT_BRANCH}; git dirty: ${GIT_DIRTY}"
-	go env -w CGO_ENABLED="0"
-	go env -w GOPROXY=https://goproxy.cn/
-	go build -o ${BINDIR}/${NAME} ${GO_GCFLAGS} $(GO_LDFLAGS) ${PACKAGE}
+	@go env -w CGO_ENABLED="0"
+	@go env -w GOPROXY=https://goproxy.cn/
+	@go build -o ${BINDIR}/${NAME} ${GO_GCFLAGS} $(GO_LDFLAGS) ${PACKAGE}
+
+.PHONY: gen 
+
+gen:
+	scripts/generate.sh
+
+test:
+	@scripts/teststyle.sh
+	@echo "test-style PASS"
+	@go test ./...
+	@echo "go test ./... PASS"
+	@go vet ./...
+	@echo "go vet ./... PASS"
