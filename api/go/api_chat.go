@@ -13,13 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type ChatAPI struct {
-}
+type ChatAPI interface {
 
-// Post /v1/chat/completions
-// 创建聊天补全 
-func (api *ChatAPI) V1ChatCompletionsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
 
+    // V1ChatCompletionsPost Post /v1/chat/completions
+    // 创建聊天补全 
+     V1ChatCompletionsPost(c *gin.Context)
+
+}

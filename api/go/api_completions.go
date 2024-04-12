@@ -13,13 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type CompletionsAPI struct {
-}
+type CompletionsAPI interface {
 
-// Post /v1/completions
-// 创建完成 
-func (api *CompletionsAPI) V1CompletionsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
 
+    // V1CompletionsPost Post /v1/completions
+    // 创建完成 
+     V1CompletionsPost(c *gin.Context)
+
+}

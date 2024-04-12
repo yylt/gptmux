@@ -13,27 +13,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type ThreadsAPI struct {
-}
+type ThreadsAPI interface {
 
-// Post /v1/threads
-// 创建线程 
-func (api *ThreadsAPI) V1ThreadsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
 
-// Delete /v1/threads/:thread_id 
-// 删除话题 
-func (api *ThreadsAPI) V1ThreadsThreadIdDelete(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ThreadsPost Post /v1/threads
+    // 创建线程 
+     V1ThreadsPost(c *gin.Context)
 
-// Post /v1/threads/:thread_id 
-// 修改线程 
-func (api *ThreadsAPI) V1ThreadsThreadIdPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ThreadsThreadIdDelete Delete /v1/threads/:thread_id 
+    // 删除话题 
+     V1ThreadsThreadIdDelete(c *gin.Context)
 
+    // V1ThreadsThreadIdPost Post /v1/threads/:thread_id 
+    // 修改线程 
+     V1ThreadsThreadIdPost(c *gin.Context)
+
+}

@@ -13,13 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type ModerationsAPI struct {
-}
+type ModerationsAPI interface {
 
-// Post /v1/moderations
-// 创建内容审核 
-func (api *ModerationsAPI) V1ModerationsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
 
+    // V1ModerationsPost Post /v1/moderations
+    // 创建内容审核 
+     V1ModerationsPost(c *gin.Context)
+
+}

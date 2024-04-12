@@ -13,13 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type EmbeddingsAPI struct {
-}
+type EmbeddingsAPI interface {
 
-// Post /v1/embeddings
-// 创建嵌入 
-func (api *EmbeddingsAPI) V1EmbeddingsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
 
+    // V1EmbeddingsPost Post /v1/embeddings
+    // 创建嵌入 
+     V1EmbeddingsPost(c *gin.Context)
+
+}

@@ -13,27 +13,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type ModelsAPI struct {
-}
+type ModelsAPI interface {
 
-// Get /v1/models
-// 列出模型 
-func (api *ModelsAPI) V1ModelsGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
 
-// Get /v1/models/:model
-// 删除微调模型 
-func (api *ModelsAPI) V1ModelsModelGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ModelsGet Get /v1/models
+    // 列出模型 
+     V1ModelsGet(c *gin.Context)
 
-// Get /v1/models/:modelid
-// 检索模型 
-func (api *ModelsAPI) V1ModelsModelidGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ModelsModelGet Get /v1/models/:model
+    // 删除微调模型 
+     V1ModelsModelGet(c *gin.Context)
 
+    // V1ModelsModelidGet Get /v1/models/:modelid
+    // 检索模型 
+     V1ModelsModelidGet(c *gin.Context)
+
+}

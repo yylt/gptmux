@@ -13,41 +13,27 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type FineTuningAPI struct {
-}
+type FineTuningAPI interface {
 
-// Post /v1/fine_tuning/jobs/:fine_tuning_job_id/cancel
-// 取消微调 
-func (api *FineTuningAPI) V1FineTuningJobsFineTuningJobIdCancelPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
 
-// Get /v1/fine_tuning/jobs/:fine_tuning_job_id/events
-// 列出微调事件 
-func (api *FineTuningAPI) V1FineTuningJobsFineTuningJobIdEventsGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1FineTuningJobsFineTuningJobIdCancelPost Post /v1/fine_tuning/jobs/:fine_tuning_job_id/cancel
+    // 取消微调 
+     V1FineTuningJobsFineTuningJobIdCancelPost(c *gin.Context)
 
-// Get /v1/fine_tuning/jobs/:fine_tuning_job_id
-// 检索微调作业 
-func (api *FineTuningAPI) V1FineTuningJobsFineTuningJobIdGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1FineTuningJobsFineTuningJobIdEventsGet Get /v1/fine_tuning/jobs/:fine_tuning_job_id/events
+    // 列出微调事件 
+     V1FineTuningJobsFineTuningJobIdEventsGet(c *gin.Context)
 
-// Get /v1/fine_tuning/jobs
-// 列出微调作业 
-func (api *FineTuningAPI) V1FineTuningJobsGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1FineTuningJobsFineTuningJobIdGet Get /v1/fine_tuning/jobs/:fine_tuning_job_id
+    // 检索微调作业 
+     V1FineTuningJobsFineTuningJobIdGet(c *gin.Context)
 
-// Post /v1/fine_tuning/jobs
-// 创建微调作业 
-func (api *FineTuningAPI) V1FineTuningJobsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1FineTuningJobsGet Get /v1/fine_tuning/jobs
+    // 列出微调作业 
+     V1FineTuningJobsGet(c *gin.Context)
 
+    // V1FineTuningJobsPost Post /v1/fine_tuning/jobs
+    // 创建微调作业 
+     V1FineTuningJobsPost(c *gin.Context)
+
+}

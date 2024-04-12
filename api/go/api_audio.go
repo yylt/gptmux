@@ -13,41 +13,27 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type AudioAPI struct {
-}
+type AudioAPI interface {
 
-// Get /v1/audio/speech
-// 创建语音 
-func (api *AudioAPI) V1AudioSpeechGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
 
-// Get /v1/audio/transcriptions
-// 创建转录 
-func (api *AudioAPI) V1AudioTranscriptionsGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1AudioSpeechGet Get /v1/audio/speech
+    // 创建语音 
+     V1AudioSpeechGet(c *gin.Context)
 
-// Post /v1/audio/transcriptions
-// 创建转录 
-func (api *AudioAPI) V1AudioTranscriptionsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1AudioTranscriptionsGet Get /v1/audio/transcriptions
+    // 创建转录 
+     V1AudioTranscriptionsGet(c *gin.Context)
 
-// Get /v1/audio/translations
-// 创建翻译 
-func (api *AudioAPI) V1AudioTranslationsGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1AudioTranscriptionsPost Post /v1/audio/transcriptions
+    // 创建转录 
+     V1AudioTranscriptionsPost(c *gin.Context)
 
-// Post /v1/audio/translations
-// 创建翻译 
-func (api *AudioAPI) V1AudioTranslationsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1AudioTranslationsGet Get /v1/audio/translations
+    // 创建翻译 
+     V1AudioTranslationsGet(c *gin.Context)
 
+    // V1AudioTranslationsPost Post /v1/audio/translations
+    // 创建翻译 
+     V1AudioTranslationsPost(c *gin.Context)
+
+}

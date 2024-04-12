@@ -13,62 +13,39 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type RunsAPI struct {
-}
+type RunsAPI interface {
 
-// Post /v1/threads/runs
-// 创建线程并运行 
-func (api *RunsAPI) V1ThreadsRunsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
 
-// Get /v1/threads/:thread_id/runs
-// 列表运行 
-func (api *RunsAPI) V1ThreadsThreadIdRunsGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ThreadsRunsPost Post /v1/threads/runs
+    // 创建线程并运行 
+     V1ThreadsRunsPost(c *gin.Context)
 
-// Post /v1/threads/:thread_id/runs
-// 创建运行 
-func (api *RunsAPI) V1ThreadsThreadIdRunsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ThreadsThreadIdRunsGet Get /v1/threads/:thread_id/runs
+    // 列表运行 
+     V1ThreadsThreadIdRunsGet(c *gin.Context)
 
-// Post /v1/threads/:thread_id/runs/:run_id/cancel
-// 取消运行 
-func (api *RunsAPI) V1ThreadsThreadIdRunsRunIdCancelPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ThreadsThreadIdRunsPost Post /v1/threads/:thread_id/runs
+    // 创建运行 
+     V1ThreadsThreadIdRunsPost(c *gin.Context)
 
-// Get /v1/threads/:thread_id/runs/:run_id 
-// 修改运行 
-func (api *RunsAPI) V1ThreadsThreadIdRunsRunIdGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ThreadsThreadIdRunsRunIdCancelPost Post /v1/threads/:thread_id/runs/:run_id/cancel
+    // 取消运行 
+     V1ThreadsThreadIdRunsRunIdCancelPost(c *gin.Context)
 
-// Get /v1/threads/:thread_id/runs/:run_id/steps
-// 列出运行步骤 
-func (api *RunsAPI) V1ThreadsThreadIdRunsRunIdStepsGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ThreadsThreadIdRunsRunIdGet Get /v1/threads/:thread_id/runs/:run_id 
+    // 修改运行 
+     V1ThreadsThreadIdRunsRunIdGet(c *gin.Context)
 
-// Get /v1 /threads/:thread_id/runs/:run_id/steps/:step_id
-// 检索运行步骤 
-func (api *RunsAPI) V1ThreadsThreadIdRunsRunIdStepsStepIdGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ThreadsThreadIdRunsRunIdStepsGet Get /v1/threads/:thread_id/runs/:run_id/steps
+    // 列出运行步骤 
+     V1ThreadsThreadIdRunsRunIdStepsGet(c *gin.Context)
 
-// Post /v1/threads/:thread_id/runs/:run_id/submit_tool_outputs
-// 提交工具输出以运行 
-func (api *RunsAPI) V1ThreadsThreadIdRunsRunIdSubmitToolOutputsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ThreadsThreadIdRunsRunIdStepsStepIdGet Get /v1 /threads/:thread_id/runs/:run_id/steps/:step_id
+    // 检索运行步骤 
+     V1ThreadsThreadIdRunsRunIdStepsStepIdGet(c *gin.Context)
 
+    // V1ThreadsThreadIdRunsRunIdSubmitToolOutputsPost Post /v1/threads/:thread_id/runs/:run_id/submit_tool_outputs
+    // 提交工具输出以运行 
+     V1ThreadsThreadIdRunsRunIdSubmitToolOutputsPost(c *gin.Context)
+
+}

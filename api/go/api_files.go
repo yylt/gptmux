@@ -13,41 +13,27 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type FilesAPI struct {
-}
+type FilesAPI interface {
 
-// Get /v1/files/:file_id/content
-// 检索文件内容 
-func (api *FilesAPI) V1FilesFileIdContentGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
 
-// Delete /v1/files/:file_id
-// 删除文件 
-func (api *FilesAPI) V1FilesFileIdDelete(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1FilesFileIdContentGet Get /v1/files/:file_id/content
+    // 检索文件内容 
+     V1FilesFileIdContentGet(c *gin.Context)
 
-// Get /v1/files/:file_id
-// 检索文件 
-func (api *FilesAPI) V1FilesFileIdGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1FilesFileIdDelete Delete /v1/files/:file_id
+    // 删除文件 
+     V1FilesFileIdDelete(c *gin.Context)
 
-// Get /v1/files _
-// 列出文件 
-func (api *FilesAPI) V1FilesGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1FilesFileIdGet Get /v1/files/:file_id
+    // 检索文件 
+     V1FilesFileIdGet(c *gin.Context)
 
-// Post /v1/files
-// 上传文件 
-func (api *FilesAPI) V1FilesPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1FilesGet Get /v1/files _
+    // 列出文件 
+     V1FilesGet(c *gin.Context)
 
+    // V1FilesPost Post /v1/files
+    // 上传文件 
+     V1FilesPost(c *gin.Context)
+
+}

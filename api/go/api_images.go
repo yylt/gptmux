@@ -13,27 +13,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type ImagesAPI struct {
-}
+type ImagesAPI interface {
 
-// Post /v1/images/edits
-// 创建图片编辑 
-func (api *ImagesAPI) V1ImagesEditsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
 
-// Post /v1/images/generations
-// 创建图像 
-func (api *ImagesAPI) V1ImagesGenerationsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ImagesEditsPost Post /v1/images/edits
+    // 创建图片编辑 
+     V1ImagesEditsPost(c *gin.Context)
 
-// Post /v1/images/variations
-// 创建图像变体 
-func (api *ImagesAPI) V1ImagesVariationsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ImagesGenerationsPost Post /v1/images/generations
+    // 创建图像 
+     V1ImagesGenerationsPost(c *gin.Context)
 
+    // V1ImagesVariationsPost Post /v1/images/variations
+    // 创建图像变体 
+     V1ImagesVariationsPost(c *gin.Context)
+
+}

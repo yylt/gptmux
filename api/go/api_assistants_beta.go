@@ -13,69 +13,43 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type AssistantsBetaAPI struct {
-}
+type AssistantsBetaAPI interface {
 
-// Delete /v1/assistants/:assistant_id 
-// 删除助手 
-func (api *AssistantsBetaAPI) V1AssistantsAssistantIdDelete(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
 
-// Delete /v1/assistants/:assistant_id/files/:file_id 
-// 删除辅助文件 
-func (api *AssistantsBetaAPI) V1AssistantsAssistantIdFilesFileIdDelete(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1AssistantsAssistantIdDelete Delete /v1/assistants/:assistant_id 
+    // 删除助手 
+     V1AssistantsAssistantIdDelete(c *gin.Context)
 
-// Get /v1/assistants/:assistant_id/files/:file_id 
-// 检索助手文件 
-func (api *AssistantsBetaAPI) V1AssistantsAssistantIdFilesFileIdGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1AssistantsAssistantIdFilesFileIdDelete Delete /v1/assistants/:assistant_id/files/:file_id 
+    // 删除辅助文件 
+     V1AssistantsAssistantIdFilesFileIdDelete(c *gin.Context)
 
-// Get /v1/assistants/:assistant_id/files
-// 列出助手文件 
-func (api *AssistantsBetaAPI) V1AssistantsAssistantIdFilesGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1AssistantsAssistantIdFilesFileIdGet Get /v1/assistants/:assistant_id/files/:file_id 
+    // 检索助手文件 
+     V1AssistantsAssistantIdFilesFileIdGet(c *gin.Context)
 
-// Post /v1/assistants/:assistant_id/files
-// 创建辅助文件 
-func (api *AssistantsBetaAPI) V1AssistantsAssistantIdFilesPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1AssistantsAssistantIdFilesGet Get /v1/assistants/:assistant_id/files
+    // 列出助手文件 
+     V1AssistantsAssistantIdFilesGet(c *gin.Context)
 
-// Get /v1/assistants/:assistant_id
-// 检索助手 
-func (api *AssistantsBetaAPI) V1AssistantsAssistantIdGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1AssistantsAssistantIdFilesPost Post /v1/assistants/:assistant_id/files
+    // 创建辅助文件 
+     V1AssistantsAssistantIdFilesPost(c *gin.Context)
 
-// Post /v1/assistants/:assistant_id 
-// 修改助手 
-func (api *AssistantsBetaAPI) V1AssistantsAssistantIdPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1AssistantsAssistantIdGet Get /v1/assistants/:assistant_id
+    // 检索助手 
+     V1AssistantsAssistantIdGet(c *gin.Context)
 
-// Get /v1/assistants
-// 列出助手 
-func (api *AssistantsBetaAPI) V1AssistantsGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1AssistantsAssistantIdPost Post /v1/assistants/:assistant_id 
+    // 修改助手 
+     V1AssistantsAssistantIdPost(c *gin.Context)
 
-// Post /v1/assistants
-// 创建助手 
-func (api *AssistantsBetaAPI) V1AssistantsPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1AssistantsGet Get /v1/assistants
+    // 列出助手 
+     V1AssistantsGet(c *gin.Context)
 
+    // V1AssistantsPost Post /v1/assistants
+    // 创建助手 
+     V1AssistantsPost(c *gin.Context)
+
+}

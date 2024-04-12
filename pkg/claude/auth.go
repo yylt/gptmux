@@ -33,8 +33,8 @@ type auth struct {
 	hcs []*http.Cookie
 }
 
-// token, error
-// when token invalid, should refresh inner.
+// 从box获取 token，并验证是否可用
+// 不可用则通知
 func (r *auth) cookie() ([]*http.Cookie, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -51,9 +51,6 @@ func (r *auth) cookie() ([]*http.Cookie, error) {
 	)
 
 	err := r.b.Receive(func(m *box.Message) bool {
-		if m.Time.Add(time.Hour * 24 * 10).Before(now) {
-			return true
-		}
 		if strings.ToLower(m.Title) != ClaudeName {
 			return true
 		}

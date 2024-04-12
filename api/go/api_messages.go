@@ -13,48 +13,31 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type MessagesAPI struct {
-}
+type MessagesAPI interface {
 
-// Get /v1/threads/:thread_id/messages
-// 列出消息 
-func (api *MessagesAPI) V1ThreadsThreadIdMessagesGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
 
-// Get /v1 /threads/:thread_id/messages/:message_id/files/:file_id
-// 检索消息文件 
-func (api *MessagesAPI) V1ThreadsThreadIdMessagesMessageIdFilesFileIdGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ThreadsThreadIdMessagesGet Get /v1/threads/:thread_id/messages
+    // 列出消息 
+     V1ThreadsThreadIdMessagesGet(c *gin.Context)
 
-// Get /v1/threads/:thread_id/messages/:message_id/files _
-// 列出消息文件 
-func (api *MessagesAPI) V1ThreadsThreadIdMessagesMessageIdFilesGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ThreadsThreadIdMessagesMessageIdFilesFileIdGet Get /v1 /threads/:thread_id/messages/:message_id/files/:file_id
+    // 检索消息文件 
+     V1ThreadsThreadIdMessagesMessageIdFilesFileIdGet(c *gin.Context)
 
-// Get /v1/threads/:thread_id/messages/:message_id 
-// 检索消息 
-func (api *MessagesAPI) V1ThreadsThreadIdMessagesMessageIdGet(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ThreadsThreadIdMessagesMessageIdFilesGet Get /v1/threads/:thread_id/messages/:message_id/files _
+    // 列出消息文件 
+     V1ThreadsThreadIdMessagesMessageIdFilesGet(c *gin.Context)
 
-// Post /v1/threads/:thread_id/messages/:message_id 
-// 修改留言 
-func (api *MessagesAPI) V1ThreadsThreadIdMessagesMessageIdPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ThreadsThreadIdMessagesMessageIdGet Get /v1/threads/:thread_id/messages/:message_id 
+    // 检索消息 
+     V1ThreadsThreadIdMessagesMessageIdGet(c *gin.Context)
 
-// Post /v1/threads/:thread_id/messages
-// 创建消息 
-func (api *MessagesAPI) V1ThreadsThreadIdMessagesPost(c *gin.Context) {
-	// Your handler implementation
-	c.JSON(200, gin.H{"status": "OK"})
-}
+    // V1ThreadsThreadIdMessagesMessageIdPost Post /v1/threads/:thread_id/messages/:message_id 
+    // 修改留言 
+     V1ThreadsThreadIdMessagesMessageIdPost(c *gin.Context)
 
+    // V1ThreadsThreadIdMessagesPost Post /v1/threads/:thread_id/messages
+    // 创建消息 
+     V1ThreadsThreadIdMessagesPost(c *gin.Context)
+
+}
