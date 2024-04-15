@@ -5,6 +5,10 @@ import "strings"
 type ChatModel string
 
 const (
+	RoleAssistant = "assistant"
+	RoleUser      = "user"
+	RoleSystem    = "system"
+
 	GPT3Model     ChatModel = "gpt-3.5"
 	GPT3PlusModel ChatModel = "gpt-3.5-turbo"
 	GPT4Model     ChatModel = "gpt-4"
