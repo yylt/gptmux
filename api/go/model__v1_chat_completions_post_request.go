@@ -18,7 +18,7 @@ type V1ChatCompletionsPostRequest struct {
 	Messages []V1ChatCompletionsPostRequestMessagesInner `json:"messages"`
 
 	// 使用什么采样温度，介于 0 和 2 之间。较高的值（如 0.8）将使输出更加随机，而较低的值（如 0.2）将使输出更加集中和确定。  我们通常建议改变这个或`top_p`但不是两者。
-	Temperature int32 `json:"temperature,omitempty"`
+	Temperature float32 `json:"temperature,omitempty"`
 
 	// 一种替代温度采样的方法，称为核采样，其中模型考虑具有 top_p 概率质量的标记的结果。所以 0.1 意味着只考虑构成前 10% 概率质量的标记。  我们通常建议改变这个或`temperature`但不是两者。
 	TopP int32 `json:"top_p,omitempty"`
@@ -51,8 +51,8 @@ type V1ChatCompletionsPostRequest struct {
 	Seen int32 `json:"seen,omitempty"`
 
 	// 模型可以调用的一组工具列表。目前,只支持作为工具的函数。使用此功能来提供模型可以为之生成 JSON 输入的函数列表。
-	Tools []string `json:"tools"`
+	Tools []string `json:"tools,omitempty"`
 
 	// 控制模型调用哪个函数(如果有的话)。none 表示模型不会调用函数,而是生成消息。auto 表示模型可以在生成消息和调用函数之间进行选择。通过 {\"type\": \"function\", \"function\": {\"name\": \"my_function\"}} 强制模型调用该函数。  如果没有函数存在,默认为 none。如果有函数存在,默认为 auto。  显示可能的类型
-	ToolChoice map[string]interface{} `json:"tool_choice"`
+	ToolChoice map[string]interface{} `json:"tool_choice,omitempty"`
 }

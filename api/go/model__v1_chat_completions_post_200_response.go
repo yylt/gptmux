@@ -19,5 +19,5 @@ type V1ChatCompletionsPost200Response struct {
 
 	Choices []V1ChatCompletionsPost200ResponseChoicesInner `json:"choices"`
 
-	Usage V1ChatCompletionsPost200ResponseUsage `json:"usage"`
+	Usage V1ChatCompletionsPost200ResponseUsage `json:"usage,omitempty"`
 }

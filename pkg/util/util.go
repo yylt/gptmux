@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/url"
+	"os"
 	"sync"
 	"unicode"
 	"unsafe"
@@ -73,4 +74,13 @@ func HasChineseChar(str string) bool {
 func IsNewline(r rune) bool {
 
 	return r == '\r' || r == '\n'
+}
+
+func GetEnvAny(names ...string) string {
+	for _, n := range names {
+		if val := os.Getenv(n); val != "" {
+			return val
+		}
+	}
+	return ""
 }

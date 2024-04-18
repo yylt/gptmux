@@ -14,7 +14,9 @@ const (
 	GPT4Model     ChatModel = "gpt-4"
 	GPT4PlusModel ChatModel = "gpt-4-32k"
 
+	NonModel ChatModel = ""
 	ImgModel ChatModel = "image"
+	TxtModel ChatModel = "text"
 )
 
 type Backender interface {

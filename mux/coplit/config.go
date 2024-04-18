@@ -169,36 +169,6 @@ func (c *copilot) GenerateContent(ctx context.Context, messages []llms.MessageCo
 	return nil, nil
 }
 
-// TODO
-func (c *copilot) chatStream(fn pkg.Streamfn, prompt string) (*llms.ContentResponse, error) {
-	var (
-		ch    = make(chan string, 128)
-		errch = make(chan error)
-	)
-	go func() {
-		for {
-			select {
-			case m, ok := <-ch:
-				if ok {
-					err := fn(c.ctx, []byte(m))
-					if err != nil {
-						errch <- err
-						return
-					}
-				}
-			}
-		}
-	}()
-	_, err := c.chat.ChatStream("", prompt, ch)
-	if err != nil {
-		err = fn(c.ctx, nil)
-		if err != nil {
-
-		}
-	}
-	return nil, nil
-}
-
 func GetPrompt(messages []llms.MessageContent) string {
 	buf := util.GetBuf()
 	defer util.PutBuf(buf)

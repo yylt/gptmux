@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/yylt/gptmux/mux/claude"
+	"github.com/yylt/gptmux/mux/merlin"
 	"github.com/yylt/gptmux/pkg/box"
-	"github.com/yylt/gptmux/pkg/claude"
-	"github.com/yylt/gptmux/pkg/merlin"
 	"github.com/yylt/gptmux/pkg/serve"
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	Merlin merlin.Config  `yaml:"merlin"`
+	Merlin merlin.Config  `yaml:"merlin,omitempty"`
 	Claude claude.Conf    `yaml:"claude,omitempty"`
 	Notify box.NotifyConf `yaml:"notify,omitempty"`
 	Model  serve.Conf     `yaml:"model,omitempty"`

@@ -9,11 +9,9 @@
 
 package openapi
 
-type V1ChatCompletionsPost200ResponseChoicesInner struct {
+type V1ChatCompletionsPost200ResponseChoicesInnerDelta struct {
 
-	Index int32 `json:"index,omitempty"`
+	Role string `json:"role"`
 
-	Delta V1ChatCompletionsPost200ResponseChoicesInnerDelta `json:"delta,omitempty"`
-
-	FinishReason string `json:"finish_reason,omitempty"`
+	Content string `json:"content"`
 }

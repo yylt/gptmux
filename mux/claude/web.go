@@ -8,11 +8,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+	"unicode"
 
 	fhttp "github.com/bogdanfinn/fhttp"
 	tlsclient "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 	"github.com/go-resty/resty/v2"
+	"github.com/gofrs/uuid/v5"
+	"github.com/tmc/langchaingo/llms"
+	"github.com/yylt/gptmux/mux"
 	"github.com/yylt/gptmux/pkg"
 	"github.com/yylt/gptmux/pkg/box"
 	"github.com/yylt/gptmux/pkg/util"
@@ -20,8 +28,10 @@ import (
 )
 
 var (
+	lastupdate time.Time
+
 	ClaudeName   = "claude"
-	ClaudeChatid = "chatid"
+	ClaudeChatid = "claudeid"
 
 	headers = map[string]string{
 		"Origin":          "https://claude.ai",
@@ -36,26 +46,39 @@ type Conf struct {
 }
 
 type web struct {
+	ctx context.Context
+
+	mu  sync.RWMutex
+	hcs []*http.Cookie
+
 	cli *resty.Client
 
 	chatid string
 
 	orgid string
 
-	auth *auth
+	b box.Box
 
 	tlscli tlsclient.HttpClient
 }
 
-func New(ctx context.Context, cf *Conf, b box.Box) pkg.Backender {
+func New(ctx context.Context, cf *Conf, b box.Box) *web {
 	s := &web{
 		chatid: cf.ChatUuid,
+		b:      b,
+		ctx:    ctx,
 	}
-	tr, err := util.NewRoundTripper(
-		// Reference: https://bogdanfinn.gitbook.io/open-source-oasis/tls-client/client-options
-		tlsclient.WithRandomTLSExtensionOrder(), // Chrome 107+
-		tlsclient.WithClientProfile(profiles.Chrome_120),
+	var (
+		opts = []tlsclient.HttpClientOption{
+			tlsclient.WithRandomTLSExtensionOrder(), // Chrome 107+
+			tlsclient.WithClientProfile(profiles.Chrome_120),
+		}
 	)
+	if p := util.GetEnvAny("HTTP_PROXY", "http_proxy"); p != "" {
+		opts = append(opts, tlsclient.WithProxyUrl(p))
+	}
+	// Reference: https://bogdanfinn.gitbook.io/open-source-oasis/tls-client/client-options
+	tr, err := util.NewRoundTripper(opts...)
 	if err != nil {
 		panic(err)
 	}
@@ -63,13 +86,7 @@ func New(ctx context.Context, cf *Conf, b box.Box) pkg.Backender {
 	// Set as transport. Don't forget to set the UA!
 	s.cli = resty.New().SetTransport(tr).SetHeaders(headers)
 
-	s.auth = newAuth(s, ctx, b)
-	ck, err := s.auth.cookie()
-	if err != nil {
-		panic(err)
-	}
-	s.orgid, _ = s.user(ck)
-	go s.auth.run()
+	go s.run()
 
 	return s
 }
@@ -78,16 +95,65 @@ func (c *web) Name() string {
 	return ClaudeName
 }
 
-func (c *web) Send(prompt string, t pkg.ChatModel) (<-chan *pkg.BackResp, error) {
-	cookie, err := c.auth.cookie()
+func (c *web) GenerateContent(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
+	if !c.mu.TryLock() {
+		return nil, fmt.Errorf("pending")
+	}
+	defer c.mu.Unlock()
+	prompt, model := mux.GeneraPrompt(messages)
+
+	if model != pkg.TxtModel {
+		return nil, fmt.Errorf("not support model '%s'", model)
+	}
+	var (
+		opt          = &llms.CallOptions{}
+		bctx, cancle = context.WithCancel(ctx)
+		data         = &llms.ContentResponse{}
+	)
+	for _, o := range options {
+		o(opt)
+	}
+	defer cancle()
+	resp, err := c.chat(prompt)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		// TODO newchat
+		return nil, fmt.Errorf("chat claude failed: %s, code: %v", http.StatusText(resp.StatusCode), resp.StatusCode)
+	}
+	klog.V(2).Infof("upstream '%s', model: %s, prompt '%s'", c.Name(), model, strconv.Quote(prompt))
+	process(resp.Body, func(er *eventResp) error {
+		content, done := text(er)
+		data.Choices = append(data.Choices, &llms.ContentChoice{
+			Content: content,
+		})
+		if done {
+			data.Choices = append(data.Choices, &llms.ContentChoice{
+				StopReason: "stop",
+			})
+		}
+		if opt.StreamingFunc != nil {
+			return opt.StreamingFunc(bctx, []byte(content))
+		}
+		return nil
+	})
+	return data, nil
+}
+
+func (c *web) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
+	return "", fmt.Errorf("not implement")
+}
+
+func (c *web) chat(prompt string) (*fhttp.Response, error) {
+	cookie, err := c.cookie()
 	if err != nil {
 		return nil, err
 	}
 
 	address := fmt.Sprintf("https://claude.ai/api/organizations/%s/chat_conversations/%s/completion", c.orgid, c.chatid)
 
-	buf := util.GetBuf()
-	defer util.PutBuf(buf)
 	bs, err := json.Marshal(map[string]any{
 		"prompt":   prompt,
 		"timezone": "Asia/Shanghai",
@@ -117,12 +183,22 @@ func (c *web) Send(prompt string, t pkg.ChatModel) (<-chan *pkg.BackResp, error)
 		return nil, err
 	}
 
-	if resp.StatusCode != 200 {
-		buf.ReadFrom(resp.Body)
-		resp.Body.Close()
-		return nil, fmt.Errorf("chat claude failed: %s, body: %v", http.StatusText(resp.StatusCode), buf.String())
+	return resp, nil
+}
+
+func (c *web) Send(prompt string, t pkg.ChatModel) (<-chan *pkg.BackResp, error) {
+	resp, err := c.chat(prompt)
+	if err != nil {
+		return nil, err
 	}
-	var rsch = make(chan *pkg.BackResp, 4)
+
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		// newchat
+		return nil, fmt.Errorf("chat claude failed: %s, code: %v", http.StatusText(resp.StatusCode), resp.StatusCode)
+	}
+
+	var rsch = make(chan *pkg.BackResp, 16)
 	go func(sch chan *pkg.BackResp, body io.ReadCloser) {
 		var (
 			respData = &eventResp{}
@@ -154,6 +230,52 @@ func (c *web) Send(prompt string, t pkg.ChatModel) (<-chan *pkg.BackResp, error)
 	return rsch, nil
 }
 
+func (c *web) newchat(cookie []*http.Cookie) (string, error) {
+
+	id, err := uuid.NewV4()
+	if err != nil {
+		return "", err
+	}
+	klog.Infof("new chat id %s", id)
+	payload := map[string]interface{}{
+		"uuid": id.String(),
+		"name": "",
+	}
+	url := fmt.Sprintf("https://claude.ai/api/organizations/%s/chat_conversations", c.orgid)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		klog.Infof("Error marshaling payload:", err)
+		return "", err
+	}
+	req, err := fhttp.NewRequest(http.MethodPost, url, bytes.NewReader(payloadBytes))
+	if err != nil {
+		return "", err
+	}
+	for _, ck := range cookie {
+		req.AddCookie(&fhttp.Cookie{
+			Name:  ck.Name,
+			Value: ck.Value,
+		})
+	}
+
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("content-type", "application/json")
+	for k, v := range headers {
+		req.Header.Add(k, v)
+	}
+
+	resp, err := c.tlscli.Do(req)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		return "", fmt.Errorf("newchat claude failed: %d, body: %v", resp.StatusCode)
+	}
+	return id.String(), nil
+}
+
 func (c *web) user(hc []*http.Cookie) (org string, err error) {
 	if hc == nil {
 		return "", fmt.Errorf("cookie must set")
@@ -161,10 +283,11 @@ func (c *web) user(hc []*http.Cookie) (org string, err error) {
 	var u = &user{}
 	url := "https://claude.ai/api/auth/current_account"
 	resp, err := c.cli.R().SetCookies(hc).SetResult(u).Get(url)
+	klog.Infof("claude user api, response: %v, errmsg: %v", u, err)
 	if err != nil {
 		return "", err
 	}
-	klog.Infof("claude user api, response: %v", u)
+
 	defer resp.RawBody().Close()
 	if util.IsHttp20xCode(resp.StatusCode()) {
 		for _, m := range u.Account.Members {
@@ -176,4 +299,97 @@ func (c *web) user(hc []*http.Cookie) (org string, err error) {
 		return org, nil
 	}
 	return "", fmt.Errorf("failed user api, code: %d, body: %#v", resp.StatusCode(), resp.Body())
+}
+
+// 从box获取 token，并验证是否可用
+// 不可用则通知
+func (c *web) cookie() ([]*http.Cookie, error) {
+	if c.hcs != nil {
+		_, err := c.user(c.hcs)
+		if err == nil {
+			return c.hcs, nil
+		}
+	}
+
+	var (
+		now          = time.Now()
+		cookiev, idv string
+	)
+
+	err := c.b.Receive(func(m *box.Message) bool {
+		t := strings.ToLower(m.Title)
+		switch t {
+		case ClaudeChatid:
+			if idv == "" {
+				idv = strings.Map(func(r rune) rune {
+					if unicode.IsSpace(r) {
+						return rune(0)
+					}
+					return r
+				}, m.Msg)
+
+				klog.Infof("title: '%v', var: '%s'", ClaudeChatid, idv)
+			}
+
+		case ClaudeName:
+			if cookiev == "" {
+				cookiev = strings.Map(func(r rune) rune {
+					if unicode.IsSpace(r) {
+						return rune(0)
+					}
+					return r
+				}, m.Msg)
+
+				klog.Infof("title: '%v', var: '%s'", ClaudeName, cookiev)
+			}
+		}
+		return true
+	})
+	if err != nil {
+		return nil, err
+	}
+	// not found
+	if cookiev == "" {
+		if lastupdate.Add(interval).Before(now) {
+			c.b.Push(&box.Message{
+				Title: "require token: " + ClaudeName,
+				Msg:   "更新token",
+			})
+			lastupdate = now
+		}
+		return nil, fmt.Errorf("not found claude token")
+	}
+	hcs := []*http.Cookie{
+		{
+			Name:  cookiekey,
+			Value: cookiev,
+		},
+	}
+	oid, err := c.user(hcs)
+	if err != nil {
+		return nil, err
+	}
+	c.hcs = hcs
+	c.orgid = oid
+	if idv != "" {
+		c.chatid = idv
+	}
+
+	return c.hcs, nil
+}
+
+func (c *web) run() {
+	_, err := c.cookie()
+	if err != nil {
+		klog.Infof("claude cookie failed: %v", err)
+	}
+
+	for {
+		select {
+		case <-time.NewTimer(interval).C:
+			c.cookie()
+		case <-c.ctx.Done():
+			return
+		}
+	}
 }

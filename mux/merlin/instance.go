@@ -9,23 +9,13 @@ import (
 )
 
 var (
-	// not use
-	modelCost = map[string]int{
-		"GPT 3":            1,
-		"GPT 4":            30,
-		"claude-instant-1": 2,
-		"claude-2":         8,
-		// t2i
-		"Dreamshape v7": 10,
-		"RPG v5":        10,
-	}
 	defaultImageModel = "Dreamshape v7"
-	defaultChatModel  = "GPT 3"
+	defaultChatModel  = "claude-3-haiku"
 )
 
 type instance struct {
-	idtoken     string // status
 	accesstoken string // chat
+	idtoken     string
 	user        string
 	password    string
 	used        int
@@ -35,7 +25,6 @@ type instance struct {
 func (c *instance) DeepCopy() *instance {
 	return &instance{
 		accesstoken: c.accesstoken,
-		idtoken:     c.idtoken,
 		user:        c.user,
 		password:    c.password,
 		used:        c.used,
@@ -71,7 +60,7 @@ func NewInstControl(d time.Duration, ml *Merlin, user []*user) *instCtrl {
 		}
 		err := ml.refresh(in)
 		if err != nil {
-			klog.Error(err)
+			klog.Warning(err)
 			continue
 		}
 		queue.Enqueue(in)
@@ -89,19 +78,13 @@ func (ic *instCtrl) Eequeue(m *instance) {
 	ic.queue.Enqueue(m)
 }
 
-func (ic *instCtrl) Dequeue(m string) (*instance, error) {
+func (ic *instCtrl) Dequeue() (*instance, error) {
 
 	v, ok := ic.queue.Dequeue()
 	if !ok {
 		return nil, fmt.Errorf("not found instance")
 	}
-	inst := v.(*instance)
-	// TODO: mostly 10
-	if inst.limit-inst.used < 10 {
-		ic.queue.Enqueue(v)
-		return nil, fmt.Errorf("no avaliable instance to use")
-	}
-	return inst, nil
+	return v.(*instance), nil
 }
 
 func (ic *instCtrl) run() {
@@ -113,7 +96,7 @@ func (ic *instCtrl) run() {
 			if !ok {
 				continue
 			}
-			if v.accesstoken != "" && ic.ml.status(v) == nil {
+			if v.accesstoken != "" && ic.ml.usage(v) == nil {
 				klog.Infof("user(%s/%s) limit %d used %d.", v.user, v.password, v.limit, v.used)
 				continue
 			}
