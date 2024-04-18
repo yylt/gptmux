@@ -1,9 +1,6 @@
 package merlin
 
 import (
-	"fmt"
-	"path"
-
 	"github.com/google/uuid"
 )
 
@@ -26,86 +23,44 @@ type UserResp struct {
 	Data   *UserData `json:"data"`
 }
 
-type UserData struct {
-	User *Usage `json:"user"`
-}
-
-type Usage struct {
-	Used  int    `json:"used"`
-	Type  string `json:"type"`
-	Limit int    `json:"limit"`
-}
-
 type EventResp struct {
 	Status string     `json:"status"`
 	Data   *eventData `json:"data"`
 }
 
-type Attachment struct {
-	Id   string `json:"id,omitempty"`
-	Type string `json:"type,omitempty"`
-	Url  string `json:"url"`
+type UserData struct {
+	User struct {
+		Used  int    `json:"used"`
+		Type  string `json:"type"`
+		Limit int    `json:"limit"`
+	} `json:"user"`
 }
 
-type setting struct {
-	Id string `json:"chatId,omitempty"`
-	Ts string `json:"timestamp,omitempty"`
-}
 type eventData struct {
-	Content string        `json:"content,omitempty"`
-	Attachs []*Attachment `json:"attachments,omitempty"`
-	Type    string        `json:"eventType"`
-	Usage   *Usage        `json:"usage,omitempty"`
-	Setting *setting      `json:"settings,omitempty"`
+	Content string `json:"content,omitempty"`
+	Attachs []struct {
+		Id   string `json:"id,omitempty"`
+		Type string `json:"type,omitempty"`
+		Url  string `json:"url"`
+	} `json:"attachments,omitempty"`
+	Type  string `json:"eventType"`
+	Usage struct {
+		Used  int    `json:"used"`
+		Type  string `json:"type"`
+		Limit int    `json:"limit"`
+	} `json:"usage,omitempty"`
+	Setting struct {
+		Id string `json:"chatId,omitempty"`
+		Ts string `json:"timestamp,omitempty"`
+	} `json:"settings,omitempty"`
 }
 
 type TokenResp struct {
-	Status string     `json:"status"`
-	Data   *tokenData `json:"data"`
-}
-type tokenData struct {
-	Access  string `json:"accessToken"`
-	Refresh string `json:"refreshToken"`
-}
-
-func getStatusUrl(merlinbase string, token string) string {
-	surl := path.Join(merlinbase, fmt.Sprintf("status?firebaseToken=%s&from=DASHBOARD", token))
-	return "https://" + surl
-}
-
-func getAuth1Url(authbase string, key string) string {
-	surl := path.Join(authbase, fmt.Sprintf("/v1/accounts:signInWithPassword?key=%s", key))
-	return "https://" + surl
-}
-
-func getAuth1Body(user, pass string) map[string]interface{} {
-	return map[string]interface{}{
-		"returnSecureToken": true,
-		"email":             user,
-		"password":          pass,
-		"clientType":        "CLIENT_TYPE_WEB",
-	}
-}
-
-func getAuth2Url(merlinbase string) string {
-	surl := path.Join(merlinbase, "session/get")
-	return "https://" + surl
-}
-
-func getAuth2Body(idtoken string) map[string]interface{} {
-	return map[string]interface{}{
-		"token": idtoken,
-	}
-}
-
-func getChatUrl(merlinbase string) string {
-	surl := path.Join(merlinbase, "thread?customJWT=true&version=1.1")
-	return "https://" + surl
-}
-
-func getImageUrl(merlinbase string) string {
-	surl := path.Join(merlinbase, "thread/image-generation?customJWT=true")
-	return "https://" + surl
+	Status string `json:"status"`
+	Data   struct {
+		Access  string `json:"accessToken"`
+		Refresh string `json:"refreshToken"`
+	} `json:"data"`
 }
 
 func chatBody(prompt string, model string) map[string]interface{} {

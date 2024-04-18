@@ -2,9 +2,9 @@ package serve
 
 import (
 	"context"
-	"fmt"
+	"io"
 	"net/http"
-	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tmc/langchaingo/llms"
@@ -12,7 +12,12 @@ import (
 	openapi "github.com/yylt/gptmux/api/go"
 	"github.com/yylt/gptmux/mux"
 	"github.com/yylt/gptmux/pkg"
+	"github.com/yylt/gptmux/pkg/util"
 	"k8s.io/klog/v2"
+)
+
+var (
+	msgType = "message"
 )
 
 type chat struct {
@@ -21,12 +26,15 @@ type chat struct {
 	models []mux.Model
 }
 
-func New(ms ...mux.Model) *chat {
+func New(ctx context.Context, ms ...mux.Model) *chat {
 	return &chat{
+		ctx:    ctx,
 		models: append([]mux.Model{}, ms...),
 	}
 }
 
+// V1ChatCompletionsPost Post /v1/chat/completions
+// 创建聊天补全
 func (ca *chat) V1ChatCompletionsPost(c *gin.Context) {
 	var (
 		body = openapi.V1ChatCompletionsPostRequest{}
@@ -37,65 +45,94 @@ func (ca *chat) V1ChatCompletionsPost(c *gin.Context) {
 		return
 	}
 	var (
-		opt  []llms.CallOption
+		opt  = []llms.CallOption{llms.WithModel(body.Model)}
 		data = makePrompt(&body)
+		ret  = &openapi.V1ChatCompletionsPost200Response{
+			Id:      "chatcmpl",
+			Object:  "chat.completion",
+			Created: int32(time.Now().UTC().Unix()),
+		}
 	)
+	buf := util.GetBuf()
+	defer func() {
+		klog.V(4).Infof("response data: %s", buf.String())
+		util.PutBuf(buf)
+	}()
+	opt = append(opt, llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
+		defer c.Writer.Flush()
 
-	if strings.Contains(c.GetHeader("Accept"), "text/event-stream") || body.Stream {
-		var (
-			ret = &openapi.V1ChatCompletionsPost200Response{
-				Id:     body.Model,
-				Object: body.Model,
-			}
-		)
-		opt = append(opt, llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-			select {
-			case <-ctx.Done():
-				ret.Choices = []openapi.V1ChatCompletionsPost200ResponseChoicesInner{
-					{
-						FinishReason: "stop",
+		if len(chunk) > 0 {
+			ret.Choices = []openapi.V1ChatCompletionsPost200ResponseChoicesInner{
+				{
+					Delta: openapi.V1ChatCompletionsPost200ResponseChoicesInnerDelta{
+						Role:    pkg.RoleAssistant,
+						Content: string(chunk),
 					},
-				}
-				c.SSEvent("message", ret)
-				return fmt.Errorf("done")
-			default:
-				ret.Choices = []openapi.V1ChatCompletionsPost200ResponseChoicesInner{
-					{
-						Message: openapi.V1ChatCompletionsPost200ResponseChoicesInnerMessage{
-							Role:    pkg.RoleAssistant,
-							Content: string(chunk),
-						},
-					},
-				}
-				c.SSEvent("message", ret)
+				},
 			}
+			buf.Write(chunk)
+			c.SSEvent(msgType, ret)
+		}
+		select {
+		case <-c.Writer.CloseNotify():
+			c.SSEvent(msgType, "[DONE]")
+			return io.EOF
+		case <-ctx.Done():
+			c.SSEvent(msgType, "[DONE]")
+			return io.EOF
+		default:
+		}
 
-			return nil
-		}))
-	} else {
-		c.AbortWithError(http.StatusNotAcceptable, fmt.Errorf("only support SSE"))
-		return
-	}
+		return nil
+	}))
 
 	for _, m := range ca.models {
 		_, err = m.GenerateContent(ca.ctx, data, opt...)
-		if err != nil {
+		if err == io.EOF || err == nil {
+			klog.Infof("model '%s' complete", m.Name())
+			return
+		} else {
 			klog.Warningf("model '%s' generate failed: %v", m.Name(), err)
 		}
 	}
-
+	if err != nil {
+		c.Abort()
+	}
 }
 
 func makePrompt(req *openapi.V1ChatCompletionsPostRequest) []llms.MessageContent {
 	var (
-		cont = make([]llms.MessageContent, len(req.Messages))
+		cont = map[schema.ChatMessageType]llms.MessageContent{}
+		kind schema.ChatMessageType
 	)
 	for _, msg := range req.Messages {
-		llmmsg := llms.MessageContent{
-			Role: schema.ChatMessageType(msg.Role),
+		switch msg.Role {
+		case string(schema.ChatMessageTypeAI), pkg.RoleAssistant:
+			kind = schema.ChatMessageTypeAI
+		case string(schema.ChatMessageTypeHuman), pkg.RoleUser:
+			kind = schema.ChatMessageTypeHuman
+		case string(schema.ChatMessageTypeSystem):
+			kind = schema.ChatMessageTypeSystem
+		case string(schema.ChatMessageTypeGeneric):
+			kind = schema.ChatMessageTypeGeneric
 		}
-		llmmsg.Parts=
-
+		v, ok := cont[kind]
+		if !ok {
+			cont[kind] = llms.MessageContent{
+				Role: kind,
+				Parts: []llms.ContentPart{
+					llms.TextPart(msg.Content),
+				},
+			}
+		} else {
+			v.Parts = append(v.Parts, llms.TextPart(msg.Content))
+			cont[kind] = v
+		}
 	}
-	return nil
+	ret := make([]llms.MessageContent, 0, len(cont))
+	for _, v := range cont {
+		ret = append(ret, v)
+	}
+	klog.V(4).Infof("request body: %s", ret)
+	return ret
 }

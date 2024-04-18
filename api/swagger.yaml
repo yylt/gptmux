@@ -116,7 +116,7 @@ paths:
                       type: string
                 description: 至今为止对话所包含的消息列表。Python 代码示例。
               temperature:
-                type: integer
+                type: number
                 description: >-
                   使用什么采样温度，介于 0 和 2 之间。较高的值（如 0.8）将使输出更加随机，而较低的值（如
                   0.2）将使输出更加集中和确定。  我们通常建议改变这个或`top_p`但不是两者。
@@ -219,7 +219,7 @@ paths:
                   properties:
                     index:
                       type: integer
-                    message:
+                    delta:
                       type: object
                       properties:
                         role:

@@ -1,0 +1,20 @@
+```
+        {
+			"V1ChatCompletionsPost",
+			http.MethodPost,
+			"/v1/chat/completions",
+			handleFunctions.ChatAPI.V1ChatCompletionsPost,
+		},
+		{
+			"V1ModelsGet",
+			http.MethodGet,
+			"/v1/models",
+			handleFunctions.ModelsAPI.V1ModelsGet,
+		},
+		{
+			"V1ModelsModelGet",
+			http.MethodGet,
+			"/v1/models/:model",
+			handleFunctions.ModelsAPI.V1ModelsModelGet,
+		},
+```

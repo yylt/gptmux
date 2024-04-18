@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	// check and refresh
-	interval = time.Hour * 3
+	// check and notidy
+	interval = time.Hour * 24
 
 	cookiekey = "sessionKey"
 )
@@ -76,7 +76,7 @@ func (r *auth) cookie() ([]*http.Cookie, error) {
 				Msg:   "更新token",
 			})
 		}
-		return nil, fmt.Errorf("not found token")
+		return nil, fmt.Errorf("not found claude token from box")
 	}
 	r.hcs = []*http.Cookie{
 		{
