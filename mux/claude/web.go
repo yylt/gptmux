@@ -43,6 +43,7 @@ var (
 type Conf struct {
 	// chat
 	ChatUuid string `yaml:"chat_id,omitempty"`
+	Index    int    `yaml:"index,omitempty"`
 }
 
 type web struct {
@@ -57,6 +58,8 @@ type web struct {
 
 	orgid string
 
+	index int
+
 	b box.Box
 
 	tlscli tlsclient.HttpClient
@@ -65,6 +68,7 @@ type web struct {
 func New(ctx context.Context, cf *Conf, b box.Box) *web {
 	s := &web{
 		chatid: cf.ChatUuid,
+		index:  cf.Index,
 		b:      b,
 		ctx:    ctx,
 	}
@@ -89,6 +93,11 @@ func New(ctx context.Context, cf *Conf, b box.Box) *web {
 	go s.run()
 
 	return s
+}
+
+// 排序
+func (c *web) Index() int {
+	return c.index
 }
 
 func (c *web) Name() string {

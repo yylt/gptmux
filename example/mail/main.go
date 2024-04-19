@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 
 	"github.com/gotify/go-api-client/v2/auth"
 	"github.com/gotify/go-api-client/v2/client/message"
@@ -19,6 +21,14 @@ const (
 )
 
 func main() {
+	var ms = []int{3, 4, 1, 3}
+	sort.Slice(ms, func(i, j int) bool {
+		return ms[i] > ms[j]
+	})
+	fmt.Println(ms)
+}
+
+func foo() {
 	myURL, _ := url.Parse(gotifyURL)
 	client := gotify.NewClient(myURL, &http.Client{})
 	versionResponse, err := client.Version.GetVersion(nil)
