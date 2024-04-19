@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -27,6 +28,10 @@ type chat struct {
 }
 
 func New(ctx context.Context, ms ...mux.Model) *chat {
+	// big --- little
+	sort.Slice(ms, func(i, j int) bool {
+		return ms[i].Index() > ms[j].Index()
+	})
 	return &chat{
 		ctx:    ctx,
 		models: append([]mux.Model{}, ms...),

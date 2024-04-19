@@ -66,6 +66,7 @@ type model struct {
 }
 
 type Config struct {
+	Index   int     `yaml:"index,omitempty"`
 	Authurl string  `yaml:"authurl"`
 	Authkey string  `yaml:"authkey"`
 	Appurl  string  `yaml:"appurl"`
@@ -140,6 +141,10 @@ func NewMerlinIns(cfg *Config) *Merlin {
 
 func (m *Merlin) Name() string {
 	return name
+}
+
+func (m *Merlin) Index() int {
+	return m.cfg.Index
 }
 
 func (m *Merlin) GenerateContent(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
@@ -219,7 +224,6 @@ func (m *Merlin) Call(ctx context.Context, prompt string, options ...llms.CallOp
 func (m *Merlin) refresh(v *instance) error {
 	err := m.access(v)
 	if err != nil {
-		klog.Errorf("get merlin access token failed: %v", err)
 		return err
 	}
 	return m.usage(v)
@@ -240,11 +244,7 @@ func (m *Merlin) usage(ins *instance) error {
 	}
 	defer resp.Body.Close()
 	if !util.IsHttp20xCode(resp.StatusCode) {
-		klog.Infof("usage failed, http code: %d", resp.StatusCode)
-		if resp.StatusCode == http.StatusUnauthorized {
-			return errors.New("unauth")
-		}
-		return fmt.Errorf("status get http code: %v", resp.StatusCode)
+		return fmt.Errorf("user(%s/%s) usage failed, http code: %v", ins.user, ins.password, resp.StatusCode)
 	}
 
 	var (

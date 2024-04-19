@@ -60,7 +60,7 @@ func NewInstControl(d time.Duration, ml *Merlin, user []*user) *instCtrl {
 		}
 		err := ml.refresh(in)
 		if err != nil {
-			klog.Warning(err)
+			klog.Warning(err, fmt.Sprintf(", not add user %s", in.user))
 			continue
 		}
 		queue.Enqueue(in)
@@ -102,7 +102,7 @@ func (ic *instCtrl) run() {
 			}
 			err := ic.ml.refresh(v)
 			if err != nil {
-				klog.Errorf("merlin user(%s/%s) login failed: %v", v.user, v.password, err)
+				klog.Errorf("refresh failed: %v", err)
 			}
 		}
 
