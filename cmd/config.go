@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/yylt/gptmux/mux/claude"
+	"github.com/yylt/gptmux/mux/deepseek"
 	"github.com/yylt/gptmux/mux/merlin"
 	"github.com/yylt/gptmux/pkg/box"
 	"github.com/yylt/gptmux/pkg/serve"
@@ -12,11 +13,12 @@ import (
 )
 
 type Config struct {
-	Merlin merlin.Config  `yaml:"merlin,omitempty"`
-	Claude claude.Conf    `yaml:"claude,omitempty"`
-	Notify box.NotifyConf `yaml:"notify,omitempty"`
-	Model  serve.Conf     `yaml:"model,omitempty"`
-	Addr   string         `yaml:"address"`
+	Merlin   merlin.Config  `yaml:"merlin,omitempty"`
+	Claude   claude.Conf    `yaml:"claude,omitempty"`
+	Deepseek deepseek.Conf  `yaml:"deepseek,omitempty"`
+	Notify   box.NotifyConf `yaml:"notify,omitempty"`
+	Model    serve.Conf     `yaml:"model,omitempty"`
+	Addr     string         `yaml:"address"`
 }
 
 // LoadConfigmap reads configmap data from config-path

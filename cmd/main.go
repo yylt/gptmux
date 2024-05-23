@@ -9,7 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	openapi "github.com/yylt/gptmux/api/go"
+	"github.com/yylt/gptmux/mux"
 	"github.com/yylt/gptmux/mux/claude"
+	"github.com/yylt/gptmux/mux/deepseek"
 	"github.com/yylt/gptmux/mux/merlin"
 	"github.com/yylt/gptmux/pkg/box"
 	"github.com/yylt/gptmux/pkg/serve"
@@ -30,13 +32,27 @@ func main() {
 	b := box.New(&cfg.Notify)
 
 	ctx := SetupSignalHandler()
+
+	var ms []mux.Model
+	ds := deepseek.New(&cfg.Deepseek)
+	if ds != nil {
+		ms = append(ms, ds)
+	}
 	ml := merlin.NewMerlinIns(&cfg.Merlin)
+	if ml != nil {
+		ms = append(ms, ml)
+	}
 	ca := claude.New(ctx, &cfg.Claude, b)
-	e := gin.Default()
+	if ca != nil {
+		ms = append(ms, ca)
+	}
+
 	handler := openapi.ApiHandleFunctions{
-		ChatAPI:   serve.New(ctx, ml, ca),
+		ChatAPI:   serve.New(ctx, ms...),
 		ModelsAPI: serve.NewModel(ctx),
 	}
+
+	e := gin.Default()
 	openapi.NewRouterWithGinEngine(e, handler)
 
 	e.Run(cfg.Addr)

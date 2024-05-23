@@ -29,12 +29,22 @@ type chat struct {
 
 func New(ctx context.Context, ms ...mux.Model) *chat {
 	// big --- little
+	var (
+		models []mux.Model
+	)
+	for i := range ms {
+		if ms[i] == nil {
+			continue
+		}
+		klog.Infof("Add model '%s', index '%d'", ms[i].Name(), ms[i].Index())
+		models = append(models, ms[i])
+	}
 	sort.Slice(ms, func(i, j int) bool {
 		return ms[i].Index() > ms[j].Index()
 	})
 	return &chat{
 		ctx:    ctx,
-		models: append([]mux.Model{}, ms...),
+		models: models,
 	}
 }
 
