@@ -88,7 +88,7 @@ func (d *Dseek) Index() int {
 
 func (d *Dseek) GenerateContent(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
 	if !d.mu.TryLock() {
-		return nil, fmt.Errorf("pending")
+		return nil, pkg.BusyErr
 	}
 	defer d.mu.Unlock()
 	prompt, model := mux.GeneraPrompt(messages)
