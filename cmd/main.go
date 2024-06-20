@@ -13,6 +13,7 @@ import (
 	"github.com/yylt/gptmux/mux/claude"
 	"github.com/yylt/gptmux/mux/deepseek"
 	"github.com/yylt/gptmux/mux/merlin"
+	"github.com/yylt/gptmux/mux/rkllm"
 	"github.com/yylt/gptmux/pkg/box"
 	"github.com/yylt/gptmux/pkg/serve"
 	"k8s.io/klog/v2"
@@ -45,6 +46,10 @@ func main() {
 	ca := claude.New(ctx, &cfg.Claude, b)
 	if ca != nil {
 		ms = append(ms, ca)
+	}
+	rk := rkllm.New(&cfg.Rkllm)
+	if rk != nil {
+		ms = append(ms, rk)
 	}
 
 	handler := openapi.ApiHandleFunctions{
