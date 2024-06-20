@@ -10,6 +10,7 @@ require (
 	github.com/bogdanfinn/fhttp v0.5.27
 	github.com/bogdanfinn/tls-client v1.7.2
 	github.com/cenkalti/backoff/v4 v4.2.1
+	github.com/ebitengine/purego v0.7.1
 	github.com/emirpasic/gods v1.18.1
 	github.com/gin-gonic/gin v1.9.0
 	github.com/go-resty/resty/v2 v2.11.0
