@@ -9,11 +9,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"sync"
 	"time"
 
-	req "github.com/imroc/req/v3"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/yylt/gptmux/mux"
 	"github.com/yylt/gptmux/pkg"
@@ -60,8 +58,7 @@ type user struct {
 }
 
 type model struct {
-	Gpt3 string `yaml:"gpt3,omitempty"`
-	Gpt4 string `yaml:"gpt4,omitempty"`
+	Text string `yaml:"text,omitempty"`
 	Img  string `yaml:"image,omitempty"`
 }
 
@@ -71,22 +68,16 @@ type Config struct {
 	Authkey string  `yaml:"authkey"`
 	Appurl  string  `yaml:"appurl"`
 	Users   []*user `yaml:"users"`
-	Debug   bool    `yaml:"debug"`
 	Model   model   `yaml:"model,omitempty"`
 }
 
-func (c *Config) gpt3Model() string {
-	if c.Model.Gpt3 == "" {
+func (c *Config) textModel() string {
+	if c.Model.Text == "" {
 		return defaultChatModel
 	}
-	return c.Model.Gpt3
+	return c.Model.Text
 }
-func (c *Config) gpt4Model() string {
-	if c.Model.Gpt4 == "" {
-		return defaultChatModel
-	}
-	return c.Model.Gpt4
-}
+
 func (c *Config) imageModel() string {
 	if c.Model.Img == "" {
 		return defaultImageModel
@@ -96,12 +87,6 @@ func (c *Config) imageModel() string {
 
 type Merlin struct {
 	cfg *Config
-
-	cli *req.Client
-
-	// gpt3Model string
-	// gpt4Model string
-	// imgModel  string
 
 	authurl *url.URL
 	appurl  *url.URL
@@ -124,18 +109,12 @@ func NewMerlinIns(cfg *Config) *Merlin {
 	}
 
 	ml := &Merlin{
-		cli:     req.NewClient(),
 		cfg:     cfg,
 		authurl: authurl,
 		appurl:  appurl,
 	}
 	ml.instctrl = NewInstControl(time.Minute*55, ml, cfg.Users)
-	if p := util.GetEnvAny("HTTP_PROXY", "http_proxy"); p != "" {
-		ml.cli.SetProxyURL(p)
-	}
-	if cfg.Debug {
-		ml.cli = ml.cli.EnableDebugLog()
-	}
+
 	return ml
 }
 
@@ -148,8 +127,6 @@ func (m *Merlin) Index() int {
 }
 
 func (m *Merlin) GenerateContent(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
-	prompt, model := mux.GeneraPrompt(messages)
-	klog.V(2).Infof("upstream '%s', model: %s, prompt %s", m.Name(), model, strconv.Quote(prompt))
 	var (
 		opt          = &llms.CallOptions{}
 		bctx, cancle = context.WithCancel(ctx)
@@ -158,12 +135,9 @@ func (m *Merlin) GenerateContent(ctx context.Context, messages []llms.MessageCon
 	for _, o := range options {
 		o(opt)
 	}
+	prompt, model := mux.GeneraPrompt(messages)
 
 	err := m.chat(prompt, model, func(resp *http.Response) error {
-		if resp.StatusCode != 200 {
-			resp.Body.Close()
-			return fmt.Errorf("chat failed: %s, code: %v", http.StatusText(resp.StatusCode), resp.StatusCode)
-		}
 		var (
 			respData = &EventResp{}
 
@@ -223,37 +197,33 @@ func (m *Merlin) Call(ctx context.Context, prompt string, options ...llms.CallOp
 // check token or update
 func (m *Merlin) refresh(v *instance) error {
 	err := m.access(v)
-	if err != nil {
-		return err
+	if err == nil {
+		err = m.usage(v)
 	}
-	return m.usage(v)
+	return err
 }
 
 // update ins usage
 func (m *Merlin) usage(ins *instance) error {
-	surl := fmt.Sprintf("https://%s/status?firebaseToken=%s&from=DASHBOARD", m.cfg.Appurl, ins.idtoken)
-
-	resp, err := m.cli.R().
-		SetHeaders(HeaderDefault).
-		SetHeader("accept", "*/*").
-		SetHeader("authority", m.authurl.Host).
-		SetBearerAuthToken(ins.idtoken).
-		Get(surl)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if !util.IsHttp20xCode(resp.StatusCode) {
-		return fmt.Errorf("user(%s/%s) usage failed, http code: %v", ins.user, ins.password, resp.StatusCode)
-	}
-
 	var (
-		status = UserResp{}
+		status = &UserResp{}
+		surl   = fmt.Sprintf("https://%s/status?firebaseToken=%s&from=DASHBOARD", m.cfg.Appurl, ins.idtoken)
 	)
-	err = resp.UnmarshalJson(&status)
+
+	resp, err := request(surl, "GET", nil, map[string]string{
+		"accept":        "*/*",
+		"authority":     m.authurl.Host,
+		"Authorization": "Bearer " + ins.idtoken,
+	})
 	if err != nil {
 		return err
 	}
+	resp.Body.Close()
+	err = json.NewDecoder(resp.Body).Decode(status)
+	if err != nil {
+		return err
+	}
+
 	ins.used = status.Data.User.Used
 	ins.limit = status.Data.User.Limit
 
@@ -272,18 +242,20 @@ func (m *Merlin) access(ins *instance) error {
 		surl = fmt.Sprintf("https://%s/v1/accounts:signInWithPassword?key=%s", m.cfg.Authurl, m.cfg.Authkey)
 	)
 	// idtoken
-	resp, err := m.cli.R().
-		SetHeaders(HeaderDefault).
-		SetHeader("accept", "*/*").
-		SetHeader("content-type", "application/json").
-		SetHeader("authority", m.authurl.Host).
-		SetResult(status).
-		SetBody(body).
-		Post(surl)
+	bodys, _ := json.Marshal(body)
+	resp, err := request(surl, "POST", bodys, map[string]string{
+		"accept":       "*/*",
+		"content-type": "application/json",
+		"authority":    m.authurl.Host,
+	})
 	if err != nil {
 		return err
 	}
-	resp.Response.Body.Close()
+	resp.Body.Close()
+	err = json.NewDecoder(resp.Body).Decode(status)
+	if err != nil {
+		return err
+	}
 
 	var (
 		tstatus = &TokenResp{}
@@ -294,90 +266,53 @@ func (m *Merlin) access(ins *instance) error {
 	)
 
 	// accesstoken
-	resp, err = m.cli.R().
-		SetHeaders(HeaderDefault).
-		SetHeader("accept", "*/*").
-		SetHeader("content-type", "application/json").
-		SetHeader("authority", m.authurl.Host).
-		SetBody(tbody).
-		SetResult(tstatus).
-		Post(turl)
+	bodys, _ = json.Marshal(tbody)
+	resp, err = request(turl, "POST", bodys, map[string]string{
+		"accept":       "*/*",
+		"content-type": "application/json",
+		"authority":    m.authurl.Host,
+	})
 	if err != nil {
 		return err
 	}
-	resp.Response.Body.Close()
+	resp.Body.Close()
+	err = json.NewDecoder(resp.Body).Decode(tstatus)
+	if err != nil {
+		return err
+	}
 
 	ins.accesstoken = tstatus.Data.Access
 	ins.idtoken = status.IdToken
+
 	return nil
 }
 
-func (m *Merlin) Send(prompt string, model pkg.ChatModel) (<-chan *pkg.BackResp, error) {
-	var rsch = make(chan *pkg.BackResp, 16)
-
-	go m.chat(prompt, model, func(resp *http.Response) error {
-		if resp.StatusCode != 200 {
-			resp.Body.Close()
-			close(rsch)
-			return fmt.Errorf("chat failed: %s, code: %v", http.StatusText(resp.StatusCode), resp.StatusCode)
-		}
-		var (
-			respData = &EventResp{}
-
-			ret  *pkg.BackResp
-			err  error
-			body = resp.Body
-		)
-		defer body.Close()
-		scanner := bufio.NewScanner(body)
-		for scanner.Scan() {
-			line := scanner.Bytes()
-
-			if !bytes.HasPrefix(line, util.HeaderData) {
-				continue
-			}
-			err = json.Unmarshal(bytes.TrimPrefix(line, util.HeaderData), &respData)
-			if err != nil {
-				klog.Warningf("parse event data failed: %v", err)
-				continue
-			}
-			if model == pkg.TxtModel {
-				ret = textProcess(respData)
-			} else {
-				ret = imageProcess(respData)
-			}
-			if ret == nil {
-				continue
-			}
-			rsch <- ret
-		}
-		rsch <- &pkg.BackResp{
-			Err: scanner.Err(),
-		}
-		close(rsch)
-		return nil
-	})
-	return rsch, nil
-}
-
 // check and refresh token
-func (m *Merlin) getInstance(least int) (*instance, error) {
+func (m *Merlin) getInstance(least int) (inst *instance, err error) {
 	var (
-		err error
+		failed []*instance
 	)
-	inst, err := m.instctrl.Dequeue()
-	if err != nil {
-		klog.Errorf("merlin get instance failed: %v", err)
-		return nil, err
-	}
-	if m.usage(inst) != nil {
-		err = m.refresh(inst)
+	for {
+		inst, err = m.instctrl.Dequeue()
 		if err != nil {
-			klog.Errorf("merlin refresh instance failed: %v", err)
-			return nil, err
+			klog.Errorf("merlin instance '%s' failed: %v", inst.user, err)
+			failed = append(failed, inst)
+			continue
 		}
+		if m.usage(inst) != nil {
+			err = m.refresh(inst)
+			if err != nil {
+				klog.Errorf("merlin instance '%s' failed: %v", inst.user, err)
+				failed = append(failed, inst)
+				continue
+			}
+		}
+		break
 	}
-	return inst, err
+	for _, v := range failed {
+		m.instctrl.Eequeue(v)
+	}
+	return
 }
 
 func (m *Merlin) chat(prompt string, mode pkg.ChatModel, fn func(*http.Response) error) error {
@@ -390,7 +325,7 @@ func (m *Merlin) chat(prompt string, mode pkg.ChatModel, fn func(*http.Response)
 	switch mode {
 	case pkg.TxtModel:
 		url = fmt.Sprintf("https://%s/thread?customJWT=true&version=1.1", m.cfg.Appurl)
-		body = chatBody(prompt, m.cfg.gpt4Model())
+		body = chatBody(prompt, m.cfg.textModel())
 		least = 1
 	case pkg.ImgModel:
 		url = fmt.Sprintf("https://%s/thread/image-generation?customJWT=true", m.cfg.Appurl)
@@ -413,30 +348,46 @@ func (m *Merlin) chat(prompt string, mode pkg.ChatModel, fn func(*http.Response)
 	if err != nil {
 		return fmt.Errorf("marshal body failed :%v", err)
 	}
-	// send prompt
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(bodystr))
+	resp, err := request("post", url, bodystr, map[string]string{
+		"authority":     m.authurl.Host,
+		"Accept":        "text/event-stream",
+		"Connection":    "keep-alive",
+		"content-type":  "application/json",
+		"Authorization": "Bearer " + cu.accesstoken,
+	})
 	if err != nil {
 		return err
 	}
+	return fn(resp)
+}
 
-	req.Header.Set("authority", m.authurl.Host)
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("content-type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cu.accesstoken)
+func request(address, method string, body []byte, headers map[string]string) (*http.Response, error) {
+	// send prompt
+	var buf *bytes.Buffer
+	if body != nil {
+		buf = bytes.NewBuffer(body)
+	}
+	req, err := http.NewRequest(method, address, buf)
+	if err != nil {
+		return nil, err
+	}
 
-	// Add generic headers
+	// Add Default headers
 	for k, v := range HeaderDefault {
 		req.Header.Set(k, v)
 	}
-
-	resp, err := defaultClient.Do(req)
-
-	if err != nil {
-		return err
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
-	err = fn(resp)
-	return err
+	resp, err := defaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if !util.IsHttp20xCode(resp.StatusCode) {
+		resp.Body.Close()
+		return nil, fmt.Errorf("request '%s' failed: %v, code: %d", address, http.StatusText(resp.StatusCode), resp.StatusCode)
+	}
+	return resp, nil
 }
 
 func textProcess(er *EventResp) *pkg.BackResp {

@@ -66,6 +66,10 @@ type web struct {
 }
 
 func New(ctx context.Context, cf *Conf, b box.Box) *web {
+	if cf == nil || cf.ChatUuid == "" {
+		klog.Warningf("claude init failed, config is invalid")
+		return nil
+	}
 	s := &web{
 		chatid: cf.ChatUuid,
 		index:  cf.Index,

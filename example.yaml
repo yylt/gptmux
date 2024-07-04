@@ -1,28 +1,28 @@
 address: "127.0.0.1:7900"
-claude:
-  chat_id: xx 
 notify:
   email:
-    name: xx@qq.com
+    name: x@y
     password: xx
     to:
-    - xx@163.com
+    - x@y
   tang: x
   gnotify:
     server: x
-    app_id: 2
-    app_token: Ax
+    app_token: x
     user: x
     password: x
-model:
-  gpt3: claude
-  gpt4: claude
-  image: merlin
 merlin:
   authurl: xx
   authkey: xx
   appurl: xx
-  debug: true
   users:
   - name: xx
     password: xx
+rkllm:
+  lib: x.so
+  model_path: x.rkllm
+  index: 0
+deepseek:
+  email: x@y
+  password: x
+  index: 4
