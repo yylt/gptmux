@@ -9,7 +9,6 @@ import (
 	"github.com/yylt/gptmux/mux/merlin"
 	"github.com/yylt/gptmux/mux/rkllm"
 	"github.com/yylt/gptmux/pkg/box"
-	"github.com/yylt/gptmux/pkg/serve"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,7 +17,6 @@ type Config struct {
 	Claude   claude.Conf    `yaml:"claude,omitempty"`
 	Deepseek deepseek.Conf  `yaml:"deepseek,omitempty"`
 	Notify   box.NotifyConf `yaml:"notify,omitempty"`
-	Model    serve.Conf     `yaml:"model,omitempty"`
 	Rkllm    rkllm.Conf     `yaml:"rkllm,omitempty"`
 	Addr     string         `yaml:"address"`
 }

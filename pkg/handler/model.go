@@ -1,4 +1,4 @@
-package serve
+package handler
 
 import (
 	"context"

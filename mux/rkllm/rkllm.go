@@ -3,13 +3,14 @@ package rkllm
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
+	"unsafe"
 
 	"github.com/ebitengine/purego"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/yylt/gptmux/mux"
 	"github.com/yylt/gptmux/pkg"
+	"k8s.io/klog/v2"
 )
 
 type Conf struct {
@@ -29,7 +30,7 @@ type token struct {
 }
 type result struct {
 	Text   string
-	tokens any
+	tokens uintptr
 	num    int
 }
 
@@ -53,8 +54,8 @@ type param struct {
 }
 
 var (
-	rkllm_init func(uintptr, param, uintptr) int
-	rkllm_run  func(uintptr, string, any) int
+	rkllm_init func(uintptr, unsafe.Pointer, uintptr) int
+	rkllm_run  func(uintptr, string, unsafe.Pointer) int
 
 	rkllm_destroy func(uintptr) int
 	rkllm_abort   func(uintptr) int
@@ -71,9 +72,10 @@ func New(c *Conf) *rkllm {
 	lib := c.Lib
 
 	if lib == "" || mpath == "" {
+		klog.Warningf("rkllm init failed: invalid config")
 		return nil
 	}
-	libc, err := purego.Dlopen(lib, purego.RTLD_NOW|purego.RTLD_GLOBAL)
+	libc, err := purego.Dlopen(lib, purego.RTLD_DEFAULT|purego.RTLD_NOW|purego.RTLD_GLOBAL)
 	if err != nil {
 		panic(err)
 	}
@@ -101,10 +103,11 @@ func New(c *Conf) *rkllm {
 		top_logprobs:      5,
 		use_gpu:           true,
 	}
-	ret := rkllm_init(voidfn, *pa, callbackfn)
+	ret := rkllm_init(voidfn, unsafe.Pointer(pa), callbackfn)
 	if ret != 0 {
-		log.Panicf("rkllm init failed: %v\n", ret)
+		klog.Exitf("rkllm init failed: %v\n", ret)
 	}
+	klog.Infof("rkllm init success")
 
 	return &rkllm{c: c}
 }
@@ -127,7 +130,7 @@ func (d *rkllm) GenerateContent(ctx context.Context, messages []llms.MessageCont
 	if model != pkg.TxtModel {
 		return nil, fmt.Errorf("not support model '%s'", model)
 	}
-	ret := rkllm_run(voidfn, prompt, nil)
+	ret := rkllm_run(voidfn, prompt, unsafe.Pointer(nil))
 	if ret != 0 {
 		return nil, fmt.Errorf("run failed, exit code: %v", ret)
 	}
@@ -170,11 +173,12 @@ func (d *rkllm) Call(ctx context.Context, prompt string, options ...llms.CallOpt
 	return "", fmt.Errorf("not implement")
 }
 
-func callback(r *result, a any, state int) {
+func callback(r *result, a uintptr, state int) {
+
 	if r != nil {
-		log.Printf("result %v, text: %s, state: %d\n", r, r.Text, state)
+		klog.Infof("result %v, text: %s, state: %d\n", r, r.Text, state)
 	} else {
-		log.Printf("result is null, %v\n", r)
+		klog.Infof("result is null, %v\n", r)
 		tokench <- &token{
 			err: fmt.Errorf("null result"),
 		}

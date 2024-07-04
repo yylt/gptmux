@@ -1,4 +1,4 @@
-package serve
+package handler
 
 import (
 	"context"
@@ -27,8 +27,7 @@ type chat struct {
 	models []mux.Model
 }
 
-func New(ctx context.Context, ms ...mux.Model) *chat {
-	// big --- little
+func NewChat(ctx context.Context, ms ...mux.Model) *chat {
 	var (
 		models []mux.Model
 	)
@@ -36,7 +35,7 @@ func New(ctx context.Context, ms ...mux.Model) *chat {
 		if ms[i] == nil {
 			continue
 		}
-		klog.Infof("Add model '%s', index '%d'", ms[i].Name(), ms[i].Index())
+		klog.Infof("Add backend '%s', index '%d'", ms[i].Name(), ms[i].Index())
 		models = append(models, ms[i])
 	}
 	sort.Slice(ms, func(i, j int) bool {
