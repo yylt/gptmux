@@ -15,7 +15,7 @@ import (
 	"github.com/yylt/gptmux/mux/merlin"
 	"github.com/yylt/gptmux/mux/rkllm"
 	"github.com/yylt/gptmux/pkg/box"
-	"github.com/yylt/gptmux/pkg/serve"
+	"github.com/yylt/gptmux/pkg/handler"
 	"k8s.io/klog/v2"
 )
 
@@ -52,13 +52,13 @@ func main() {
 		ms = append(ms, rk)
 	}
 
-	handler := openapi.ApiHandleFunctions{
-		ChatAPI:   serve.New(ctx, ms...),
-		ModelsAPI: serve.NewModel(ctx),
+	mux := openapi.ApiHandleFunctions{
+		ChatAPI:   handler.NewChat(ctx, ms...),
+		ModelsAPI: handler.NewModel(ctx),
 	}
 
 	e := gin.Default()
-	openapi.NewRouterWithGinEngine(e, handler)
+	openapi.NewRouterWithGinEngine(e, mux)
 
 	e.Run(cfg.Addr)
 }
