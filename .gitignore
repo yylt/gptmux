@@ -16,3 +16,4 @@
 vendor/
 test/
 bin/
+dist/

@@ -20,6 +20,8 @@ type Config struct {
 }
 
 type ollm struct {
+	ctx context.Context
+
 	mu sync.RWMutex
 
 	index int
@@ -27,7 +29,7 @@ type ollm struct {
 	llm *ollama.LLM
 }
 
-func New(cfg *Config) *ollm {
+func New(ctx context.Context, cfg *Config) *ollm {
 	if cfg == nil {
 		return nil
 	}
@@ -53,6 +55,7 @@ func New(cfg *Config) *ollm {
 		panic(err)
 	}
 	return &ollm{
+		ctx:   ctx,
 		llm:   llm,
 		index: cfg.Index,
 	}
