@@ -4,5 +4,5 @@ import "errors"
 
 var (
 	NotFoundErr = errors.New("not found")
-	BusyErr     = errors.New("busy, not valid now")
+	BusyErr     = errors.New("busy now")
 )

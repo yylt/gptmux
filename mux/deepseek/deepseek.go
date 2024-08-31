@@ -47,8 +47,8 @@ type Conf struct {
 	// chat
 	Email    string `yaml:"email"`
 	Password string `yaml:"password"`
-
-	Index int `yaml:"index,omitempty"`
+	Debug    bool   `yaml:"Debug,omitempty"`
+	Index    int    `yaml:"index,omitempty"`
 }
 
 type Dseek struct {
@@ -72,7 +72,7 @@ func New(c *Conf) *Dseek {
 	}
 	err := seek.freshToken()
 	if err != nil {
-		klog.Errorf("deep seek token failed: %v", err)
+		klog.Errorf("%s login failed: %v", seek.Name(), err)
 		return nil
 	}
 	return seek
@@ -93,7 +93,7 @@ func (d *Dseek) GenerateContent(ctx context.Context, messages []llms.MessageCont
 	defer d.mu.Unlock()
 	prompt, model := mux.GeneraPrompt(messages)
 
-	if model != pkg.TxtModel {
+	if model != mux.TxtModel {
 		return nil, fmt.Errorf("not support model '%s'", model)
 	}
 	if d.clearHistory(d.token) != nil {
@@ -113,10 +113,6 @@ func (d *Dseek) GenerateContent(ctx context.Context, messages []llms.MessageCont
 	resp, err := d.chat(prompt)
 	if err != nil {
 		return nil, err
-	}
-	if resp.StatusCode != 200 {
-		resp.Body.Close()
-		return nil, fmt.Errorf("chat deepseek failed: %s, code: %v", http.StatusText(resp.StatusCode), resp.StatusCode)
 	}
 	klog.V(2).Infof("upstream '%s', model: %s, prompt '%s'", d.Name(), model, strconv.Quote(prompt))
 	var (
@@ -191,11 +187,10 @@ func (d *Dseek) freshToken() error {
 		"mobile": "", "area_code": "",
 	}).SetHeaders(headers).SetResult(data).Post(url)
 	if err != nil {
-
 		return err
 	}
 	if !util.IsHttp20xCode(resp.StatusCode()) {
-		return errors.Join(http.ErrNotSupported, fmt.Errorf("http code %v", resp.StatusCode()))
+		return errors.Join(http.ErrNotSupported, fmt.Errorf("%s freshToken failed, http code %v", d.Name(), resp.StatusCode()))
 	}
 	d.token = data.Data.User.Token
 	return nil
