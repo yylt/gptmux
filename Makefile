@@ -62,11 +62,3 @@ binary:
 
 gen:
 	scripts/generate.sh
-
-test:
-	@scripts/teststyle.sh
-	@echo "test-style PASS"
-	@go test ./...
-	@echo "go test ./... PASS"
-	@go vet ./...
-	@echo "go vet ./... PASS"

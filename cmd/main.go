@@ -19,7 +19,6 @@ import (
 	"github.com/yylt/gptmux/mux/ollama"
 
 	"github.com/yylt/gptmux/pkg/box"
-	"github.com/yylt/gptmux/pkg/handler"
 	"k8s.io/klog/v2"
 )
 
@@ -60,12 +59,15 @@ func main() {
 	if ollm != nil {
 		ms = append(ms, ollm)
 	}
-	mux := openapi.ApiHandleFunctions{
-		ChatAPI:   handler.NewChat(ctx, ms...),
-		ModelsAPI: handler.NewModel(ctx),
+	chat := NewChat(ctx, ms...)
+
+	muxhandler := openapi.ApiHandleFunctions{
+		ChatAPI:        chat,
+		CompletionsAPI: chat,
+		ModelsAPI:      chat,
 	}
 	e := gin.Default()
-	openapi.NewRouterWithGinEngine(e, mux)
+	openapi.NewRouterWithGinEngine(e, muxhandler)
 
 	e.Run(cfg.Addr)
 }

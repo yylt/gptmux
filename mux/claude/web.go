@@ -115,7 +115,7 @@ func (c *web) GenerateContent(ctx context.Context, messages []llms.MessageConten
 	defer c.mu.Unlock()
 	prompt, model := mux.GeneraPrompt(messages)
 
-	if model != pkg.TxtModel {
+	if model != mux.TxtModel {
 		return nil, fmt.Errorf("not support model '%s'", model)
 	}
 	var (
@@ -199,7 +199,7 @@ func (c *web) chat(prompt string) (*fhttp.Response, error) {
 	return resp, nil
 }
 
-func (c *web) Send(prompt string, t pkg.ChatModel) (<-chan *pkg.BackResp, error) {
+func (c *web) Send(prompt string, t mux.ChatModel) (<-chan *pkg.BackResp, error) {
 	resp, err := c.chat(prompt)
 	if err != nil {
 		return nil, err

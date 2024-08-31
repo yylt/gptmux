@@ -1,32 +1,5 @@
 package pkg
 
-import "strings"
-
-type ChatModel string
-
-const (
-	RoleAssistant = "assistant"
-	RoleUser      = "user"
-	RoleSystem    = "system"
-
-	GPT3Model     ChatModel = "gpt-3.5"
-	GPT3PlusModel ChatModel = "gpt-3.5-turbo"
-	GPT4Model     ChatModel = "gpt-4"
-	GPT4PlusModel ChatModel = "gpt-4-32k"
-
-	NonModel ChatModel = ""
-	ImgModel ChatModel = "image"
-	TxtModel ChatModel = "text"
-)
-
-type Backender interface {
-	// async read
-	Send(prompt string, t ChatModel) (<-chan *BackResp, error)
-
-	// bk name
-	Name() string
-}
-
 // backend response
 type BackResp struct {
 	Err     error
@@ -86,44 +59,4 @@ func GetContent(req *ChatReq, finish bool, content string) *ChatResp {
 		})
 	}
 	return resp
-}
-
-func GetModels() []*Model {
-	return []*Model{
-		{
-			Id:     string(GPT3Model),
-			Model:  string(GPT3Model),
-			Object: "model",
-		},
-		{
-			Id:     string(GPT3PlusModel),
-			Model:  string(GPT3PlusModel),
-			Object: "model",
-		},
-		{
-			Id:     string(GPT4Model),
-			Model:  string(GPT4Model),
-			Object: "model",
-		},
-		{
-			Id:     string(GPT4PlusModel),
-			Model:  string(GPT4PlusModel),
-			Object: "model",
-		},
-	}
-}
-
-func ModelName(m string) (ChatModel, bool) {
-	if strings.HasPrefix(m, "gpt-3") {
-		return GPT3Model, true
-	}
-	if strings.HasPrefix(m, "gpt-4") {
-		return GPT4Model, true
-	}
-	switch m {
-	case string(ImgModel):
-		return ImgModel, true
-
-	}
-	return "", false
 }

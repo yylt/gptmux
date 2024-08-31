@@ -127,7 +127,7 @@ func (d *rkllm) GenerateContent(ctx context.Context, messages []llms.MessageCont
 	defer d.mu.Unlock()
 	prompt, model := mux.GeneraPrompt(messages)
 
-	if model != pkg.TxtModel {
+	if model != mux.TxtModel {
 		return nil, fmt.Errorf("not support model '%s'", model)
 	}
 	ret := rkllm_run(voidfn, prompt, unsafe.Pointer(nil))

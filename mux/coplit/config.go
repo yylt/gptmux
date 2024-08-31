@@ -10,10 +10,8 @@ import (
 	bing "github.com/Harry-zklcdc/bing-lib"
 	msauth "github.com/Harry-zklcdc/ms-auth"
 	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/schema"
 	"github.com/yylt/gptmux/pkg"
 	"github.com/yylt/gptmux/pkg/box"
-	"github.com/yylt/gptmux/pkg/util"
 	"k8s.io/klog/v2"
 )
 
@@ -167,24 +165,4 @@ func (c *copilot) GenerateContent(ctx context.Context, messages []llms.MessageCo
 
 	}
 	return nil, nil
-}
-
-func GetPrompt(messages []llms.MessageContent) string {
-	buf := util.GetBuf()
-	defer util.PutBuf(buf)
-	if len(messages) < 1 {
-		return ""
-	}
-	for _, msg := range messages {
-		if msg.Role != schema.ChatMessageTypeHuman {
-			continue
-		}
-		for _, p := range msg.Parts {
-			txt, ok := p.(*llms.TextContent)
-			if ok {
-				buf.WriteString(txt.Text)
-			}
-		}
-	}
-	return buf.String()
 }

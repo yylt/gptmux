@@ -37,13 +37,13 @@ var (
 )
 
 type Mode struct {
-	Name  pkg.ChatModel
+	Name  mux.ChatModel
 	Model string
 }
 
 type merlinModel struct {
 	// openai
-	name pkg.ChatModel
+	name mux.ChatModel
 
 	// merlin
 	kind string
@@ -158,7 +158,7 @@ func (m *Merlin) GenerateContent(ctx context.Context, messages []llms.MessageCon
 				klog.Warningf("parse event data failed: %v", err)
 				continue
 			}
-			if model == pkg.TxtModel {
+			if model == mux.TxtModel {
 				ret = textProcess(respData)
 			} else {
 				ret = imageProcess(respData)
@@ -315,7 +315,7 @@ func (m *Merlin) getInstance(least int) (inst *instance, err error) {
 	return
 }
 
-func (m *Merlin) chat(prompt string, mode pkg.ChatModel, fn func(*http.Response) error) error {
+func (m *Merlin) chat(prompt string, mode mux.ChatModel, fn func(*http.Response) error) error {
 
 	var (
 		url   string
@@ -323,11 +323,11 @@ func (m *Merlin) chat(prompt string, mode pkg.ChatModel, fn func(*http.Response)
 		least int
 	)
 	switch mode {
-	case pkg.TxtModel:
+	case mux.TxtModel:
 		url = fmt.Sprintf("https://%s/thread?customJWT=true&version=1.1", m.cfg.Appurl)
 		body = chatBody(prompt, m.cfg.textModel())
 		least = 1
-	case pkg.ImgModel:
+	case mux.ImgModel:
 		url = fmt.Sprintf("https://%s/thread/image-generation?customJWT=true", m.cfg.Appurl)
 		body = imageBody(prompt, m.cfg.imageModel())
 		least = 10

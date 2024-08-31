@@ -3,11 +3,14 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"sync"
 	"unicode"
 	"unsafe"
+
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -55,7 +58,6 @@ func Validurl(u *url.URL) error {
 		return fmt.Errorf("url is null")
 	}
 	return nil
-
 }
 
 func IsHttp20xCode(num int) bool {
@@ -72,7 +74,6 @@ func HasChineseChar(str string) bool {
 }
 
 func IsNewline(r rune) bool {
-
 	return r == '\r' || r == '\n'
 }
 
@@ -83,4 +84,14 @@ func GetEnvAny(names ...string) string {
 		}
 	}
 	return ""
+}
+
+func Print(b io.Reader) {
+	if b == nil {
+		return
+	}
+	buf := GetBuf()
+	buf.ReadFrom(b)
+	defer PutBuf(buf)
+	klog.Infof("%s", buf.String())
 }
