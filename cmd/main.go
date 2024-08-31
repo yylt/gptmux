@@ -13,7 +13,11 @@ import (
 	"github.com/yylt/gptmux/mux/claude"
 	"github.com/yylt/gptmux/mux/deepseek"
 	"github.com/yylt/gptmux/mux/merlin"
+
 	"github.com/yylt/gptmux/mux/rkllm"
+
+	"github.com/yylt/gptmux/mux/ollama"
+
 	"github.com/yylt/gptmux/pkg/box"
 	"github.com/yylt/gptmux/pkg/handler"
 	"k8s.io/klog/v2"
@@ -47,16 +51,19 @@ func main() {
 	if ca != nil {
 		ms = append(ms, ca)
 	}
+
 	rk := rkllm.New(&cfg.Rkllm)
 	if rk != nil {
 		ms = append(ms, rk)
 	}
-
+	ollm := ollama.New(ctx, &cfg.Ollama)
+	if ollm != nil {
+		ms = append(ms, ollm)
+	}
 	mux := openapi.ApiHandleFunctions{
 		ChatAPI:   handler.NewChat(ctx, ms...),
 		ModelsAPI: handler.NewModel(ctx),
 	}
-
 	e := gin.Default()
 	openapi.NewRouterWithGinEngine(e, mux)
 
