@@ -99,6 +99,12 @@ func getRoutes(handleFunctions ApiHandleFunctions) []Route {
 			handleFunctions.ChatAPI.V1ChatCompletionsPost,
 		},
 		{
+			"V1CompletionsPost",
+			http.MethodPost,
+			"/v1/completions",
+			handleFunctions.CompletionsAPI.V1CompletionsPost,
+		},
+		{
 			"V1ModelsGet",
 			http.MethodGet,
 			"/v1/models",

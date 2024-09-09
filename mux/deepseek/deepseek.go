@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"sync"
 
 	"github.com/go-resty/resty/v2"
@@ -98,6 +97,7 @@ func (d *Dseek) GenerateContent(ctx context.Context, messages []llms.MessageCont
 	}
 	if d.clearHistory(d.token) != nil {
 		if err := d.freshToken(); err != nil {
+			klog.Errorf("fresh failed: %s", err)
 			return nil, err
 		}
 	}
@@ -114,7 +114,7 @@ func (d *Dseek) GenerateContent(ctx context.Context, messages []llms.MessageCont
 	if err != nil {
 		return nil, err
 	}
-	klog.V(2).Infof("upstream '%s', model: %s, prompt '%s'", d.Name(), model, strconv.Quote(prompt))
+
 	var (
 		respData = &pkg.ChatResp{}
 

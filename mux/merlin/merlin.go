@@ -114,7 +114,9 @@ func NewMerlinIns(cfg *Config) *Merlin {
 		appurl:  appurl,
 	}
 	ml.instctrl = NewInstControl(time.Minute*55, ml, cfg.Users)
-
+	if ml.instctrl.Size() == 0 {
+		return nil
+	}
 	return ml
 }
 
@@ -295,8 +297,7 @@ func (m *Merlin) getInstance(least int) (inst *instance, err error) {
 	for {
 		inst, err = m.instctrl.Dequeue()
 		if err != nil {
-			klog.Errorf("merlin instance '%s' failed: %v", inst.user, err)
-			failed = append(failed, inst)
+			klog.Errorf("merlin instance failed: %v", err)
 			continue
 		}
 		if m.usage(inst) != nil {

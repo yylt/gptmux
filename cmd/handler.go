@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"sort"
@@ -49,6 +50,16 @@ func NewChat(ctx context.Context, ms ...mux.Model) *chat {
 // V1CompletionsPost Post /v1/completions
 // 创建完成
 func (ca *chat) V1CompletionsPost(c *gin.Context) {
+	var (
+		body = openapi.V1ChatCompletionsPostRequest{}
+	)
+	err := c.ShouldBindJSON(&body)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+	req, _ := json.Marshal(body)
+	klog.V(3).Infof("request data: %s", string(req))
 	ca.V1ChatCompletionsPost(c)
 }
 
@@ -63,7 +74,8 @@ func (ca *chat) V1ChatCompletionsPost(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
-
+	req, _ := json.Marshal(body)
+	klog.V(3).Infof("request data: %s", string(req))
 	var (
 		opt  = []llms.CallOption{llms.WithModel(body.Model)}
 		data = makePrompt(&body)
@@ -78,46 +90,59 @@ func (ca *chat) V1ChatCompletionsPost(c *gin.Context) {
 		klog.V(4).Infof("response data: %s", buf.String())
 		util.PutBuf(buf)
 	}()
-	opt = append(opt, llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-		defer c.Writer.Flush()
+	if body.Stream {
+		opt = append(opt, llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
+			defer c.Writer.Flush()
 
-		if len(chunk) > 0 {
-			ret.Choices = []openapi.V1ChatCompletionsPost200ResponseChoicesInner{
-				{
-					Delta: openapi.V1ChatCompletionsPost200ResponseChoicesInnerDelta{
-						Role:    mux.RoleAssistant,
-						Content: string(chunk),
+			if len(chunk) > 0 {
+				ret.Choices = []openapi.V1ChatCompletionsPost200ResponseChoicesInner{
+					{
+						Delta: openapi.V1ChatCompletionsPost200ResponseChoicesInnerDelta{
+							Role:    mux.RoleAssistant,
+							Content: string(chunk),
+						},
 					},
-				},
+				}
+				buf.Write(chunk)
+				c.SSEvent(msgType, ret)
 			}
-			buf.Write(chunk)
-			c.SSEvent(msgType, ret)
-		}
-		select {
-		case <-c.Writer.CloseNotify():
-			c.SSEvent(msgType, "[DONE]")
-			return io.EOF
-		case <-ctx.Done():
-			c.SSEvent(msgType, "[DONE]")
-			return io.EOF
-		default:
-		}
+			select {
+			case <-c.Writer.CloseNotify():
+				c.SSEvent(msgType, "[DONE]")
+				return io.EOF
+			case <-ctx.Done():
+				c.SSEvent(msgType, "[DONE]")
+				return io.EOF
+			default:
+			}
 
-		return nil
-	}))
+			return nil
+		}))
+	}
 
 	for _, m := range ca.models {
-		_, err = m.GenerateContent(ca.ctx, data, opt...)
+		data, err := m.GenerateContent(ca.ctx, data, opt...)
 		if err == io.EOF || err == nil {
-			klog.Infof("model '%s' success", m.Name())
+			klog.V(4).Infof("model '%s' success", m.Name())
+			if !body.Stream {
+				ret.Choices = make([]openapi.V1ChatCompletionsPost200ResponseChoicesInner, 0, len(data.Choices))
+				for _, v := range data.Choices {
+					ret.Choices = append(ret.Choices, openapi.V1ChatCompletionsPost200ResponseChoicesInner{
+						Message: openapi.V1ChatCompletionsPost200ResponseChoicesInnerDelta{
+							Content: v.Content,
+						},
+					})
+				}
+				req, _ := json.Marshal(ret)
+				klog.V(3).Infof("response data: %s", string(req))
+				c.JSON(http.StatusOK, ret)
+			}
 			return
 		} else {
 			klog.Warningf("model '%s' failed: %v", m.Name(), err)
 		}
 	}
-	if err != nil {
-		c.Abort()
-	}
+	c.Abort()
 }
 
 // V1ModelsGet Get /v1/models
