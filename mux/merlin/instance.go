@@ -60,7 +60,7 @@ func NewInstControl(d time.Duration, ml *Merlin, user []*user) *instCtrl {
 		}
 		err := ml.refresh(in)
 		if err != nil {
-			klog.Warning(err, fmt.Sprintf(", not add user %s", in.user))
+			klog.Warning(err, fmt.Sprintf(", not valid user: %s", in.user))
 			continue
 		}
 		queue.Enqueue(in)
@@ -70,8 +70,14 @@ func NewInstControl(d time.Duration, ml *Merlin, user []*user) *instCtrl {
 		ml:       ml,
 		queue:    queue,
 	}
-	go ic.run()
+	if queue.Size() != 0 {
+		go ic.run()
+	}
 	return ic
+}
+
+func (ic *instCtrl) Size() int {
+	return ic.queue.Size()
 }
 
 func (ic *instCtrl) Eequeue(m *instance) {
@@ -82,7 +88,7 @@ func (ic *instCtrl) Dequeue() (*instance, error) {
 
 	v, ok := ic.queue.Dequeue()
 	if !ok {
-		return nil, fmt.Errorf("not found instance")
+		return nil, fmt.Errorf("no instance")
 	}
 	return v.(*instance), nil
 }
