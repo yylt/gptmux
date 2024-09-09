@@ -10,7 +10,7 @@
 package openapi
 
 type V1ChatCompletionsPost200ResponseChoicesInnerDelta struct {
-	Role string `json:"role"`
+	Role string `json:"role,omitempty"`
 
 	Content string `json:"content,omitempty"`
 }

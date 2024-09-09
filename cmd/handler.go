@@ -125,13 +125,15 @@ func (ca *chat) V1ChatCompletionsPost(c *gin.Context) {
 		if err == io.EOF || err == nil {
 			klog.V(4).Infof("model '%s' success", m.Name())
 			if !body.Stream {
-				ret.Choices = make([]openapi.V1ChatCompletionsPost200ResponseChoicesInner, 0, len(data.Choices))
 				for _, v := range data.Choices {
-					ret.Choices = append(ret.Choices, openapi.V1ChatCompletionsPost200ResponseChoicesInner{
+					buf.WriteString(v.Content)
+				}
+				ret.Choices = []openapi.V1ChatCompletionsPost200ResponseChoicesInner{
+					{
 						Message: openapi.V1ChatCompletionsPost200ResponseChoicesInnerDelta{
-							Content: v.Content,
+							Content: buf.String(),
 						},
-					})
+					},
 				}
 				req, _ := json.Marshal(ret)
 				klog.V(3).Infof("response data: %s", string(req))
