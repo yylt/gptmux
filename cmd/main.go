@@ -55,6 +55,7 @@ func main() {
 	if rk != nil {
 		ms = append(ms, rk)
 	}
+
 	ollm := ollama.New(ctx, &cfg.Ollama)
 	if ollm != nil {
 		ms = append(ms, ollm)

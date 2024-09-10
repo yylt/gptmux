@@ -32,14 +32,11 @@ func NewChat(ctx context.Context, ms ...mux.Model) *chat {
 		models []mux.Model
 	)
 	for i := range ms {
-		if ms[i] == nil {
-			continue
-		}
-		klog.Infof("Add backend '%s', index '%d'", ms[i].Name(), ms[i].Index())
+		klog.Infof("append backend '%s', index '%d'", ms[i].Name(), ms[i].Index())
 		models = append(models, ms[i])
 	}
-	sort.Slice(ms, func(i, j int) bool {
-		return ms[i].Index() > ms[j].Index()
+	sort.Slice(models, func(i, j int) bool {
+		return models[i].Index() > models[j].Index()
 	})
 	return &chat{
 		ctx:    ctx,
@@ -50,17 +47,7 @@ func NewChat(ctx context.Context, ms ...mux.Model) *chat {
 // V1CompletionsPost Post /v1/completions
 // 创建完成
 func (ca *chat) V1CompletionsPost(c *gin.Context) {
-	var (
-		body = openapi.V1ChatCompletionsPostRequest{}
-	)
-	err := c.ShouldBindJSON(&body)
-	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
-		return
-	}
-	req, _ := json.Marshal(body)
-	klog.V(3).Infof("request data: %s", string(req))
-	ca.V1ChatCompletionsPost(c)
+	openapi.DefaultHandleFunc(c)
 }
 
 // V1ChatCompletionsPost Post /v1/chat/completions
@@ -77,7 +64,7 @@ func (ca *chat) V1ChatCompletionsPost(c *gin.Context) {
 	req, _ := json.Marshal(body)
 	klog.V(3).Infof("request data: %s", string(req))
 	var (
-		opt  = []llms.CallOption{llms.WithModel(body.Model)}
+		opt  = []llms.CallOption{}
 		data = makePrompt(&body)
 		ret  = &openapi.V1ChatCompletionsPost200Response{
 			Id:      "chatcmpl",
@@ -123,7 +110,7 @@ func (ca *chat) V1ChatCompletionsPost(c *gin.Context) {
 	for _, m := range ca.models {
 		data, err := m.GenerateContent(ca.ctx, data, opt...)
 		if err == io.EOF || err == nil {
-			klog.V(4).Infof("model '%s' success", m.Name())
+			klog.V(3).Infof("model '%s' success", m.Name())
 			if !body.Stream {
 				for _, v := range data.Choices {
 					buf.WriteString(v.Content)
