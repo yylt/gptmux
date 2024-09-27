@@ -46,6 +46,7 @@ type Conf struct {
 	// chat
 	Email    string `yaml:"email"`
 	Password string `yaml:"password"`
+	DeviceId string `yaml:"deviceid"`
 	Debug    bool   `yaml:"Debug,omitempty"`
 	Index    int    `yaml:"index,omitempty"`
 }
@@ -185,6 +186,7 @@ func (d *Dseek) freshToken() error {
 	resp, err := d.rest.R().SetBody(map[string]any{
 		"email": d.c.Email, "password": d.c.Password,
 		"mobile": "", "area_code": "",
+		"device_id": d.c.DeviceId, "os": "web",
 	}).SetHeaders(headers).SetResult(data).Post(url)
 	if err != nil {
 		return err
