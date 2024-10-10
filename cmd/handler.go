@@ -79,7 +79,10 @@ func (ca *chat) V1ChatCompletionsPost(c *gin.Context) {
 	}()
 	if body.Stream {
 		opt = append(opt, llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-			defer c.Writer.Flush()
+			defer func() {
+				c.Writer.Header().Add("Content-Type", "text/event-stream")
+				c.Writer.Flush()
+			}()
 
 			if len(chunk) > 0 {
 				ret.Choices = []openapi.V1ChatCompletionsPost200ResponseChoicesInner{
@@ -102,7 +105,6 @@ func (ca *chat) V1ChatCompletionsPost(c *gin.Context) {
 				return io.EOF
 			default:
 			}
-
 			return nil
 		}))
 	}
@@ -126,12 +128,11 @@ func (ca *chat) V1ChatCompletionsPost(c *gin.Context) {
 				klog.V(3).Infof("response data: %s", string(req))
 				c.JSON(http.StatusOK, ret)
 			}
-			return
+			break
 		} else {
 			klog.Warningf("model '%s' failed: %v", m.Name(), err)
 		}
 	}
-	c.Abort()
 }
 
 // V1ModelsGet Get /v1/models
