@@ -164,7 +164,6 @@ func (d *Dseek) GenerateContent(ctx context.Context, messages []llms.MessageCont
 		if opt.StreamingFunc != nil {
 			err = opt.StreamingFunc(bctx, []byte(ret.Content))
 			if err != nil {
-				once.Do(cancle)
 				break
 			}
 		}
