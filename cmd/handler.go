@@ -62,7 +62,7 @@ func (ca *chat) V1ChatCompletionsPost(c *gin.Context) {
 		return
 	}
 	req, _ := json.Marshal(body)
-	klog.V(3).Infof("request data: %s", string(req))
+	klog.V(3).Infof("stream: %t, request data: %s", body.Stream, string(req))
 	var (
 		opt  = []llms.CallOption{}
 		data = makePrompt(&body)
@@ -83,7 +83,6 @@ func (ca *chat) V1ChatCompletionsPost(c *gin.Context) {
 				c.Writer.Header().Add("Content-Type", "text/event-stream")
 				c.Writer.Flush()
 			}()
-
 			if len(chunk) > 0 {
 				ret.Choices = []openapi.V1ChatCompletionsPost200ResponseChoicesInner{
 					{

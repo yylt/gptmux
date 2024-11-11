@@ -23,10 +23,9 @@ var (
 	headers = map[string]string{
 		"Host":         "chat.deepseek.com",
 		"Origin":       "https://chat.deepseek.com",
-		"Referer":      "https://chat.deepseek.com/",
 		"accept":       "*/*",
 		"content-type": "application/json",
-		"User-Agent":   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		"User-Agent":   "Mozilla/5.0 (Linux; x64) Gecko/20100101 Firefox/128.0",
 	}
 	defaultClient = http.Client{
 		Transport: http.DefaultTransport,
@@ -36,10 +35,10 @@ var (
 type tokenResp struct {
 	Data struct {
 		User struct {
-			Id    string `yaml:"id"`
-			Token string `yaml:"token"`
-		} `yaml:"user"`
-	} `yaml:"data"`
+			Id    string `json:"id,omitempty"`
+			Token string `son:"toen,omitempty"`
+		} `json:"user,omitempty"`
+	} `json:"data,omitempty"`
 }
 
 type Conf struct {
@@ -47,8 +46,17 @@ type Conf struct {
 	Email    string `yaml:"email"`
 	Password string `yaml:"password"`
 	DeviceId string `yaml:"deviceid"`
-	Debug    bool   `yaml:"Debug,omitempty"`
+	Debug    bool   `yaml:"debug,omitempty"`
 	Index    int    `yaml:"index,omitempty"`
+}
+
+type uuidResp struct {
+	Data struct {
+		BizData struct {
+			Id    string `json:"id,omitempty"`
+			Agent string `json:"agent,omitempty"`
+		} `json:"biz_data,omitempty"`
+	} `json:"data,omitempty"`
 }
 
 type Dseek struct {
@@ -70,9 +78,9 @@ func New(c *Conf) *Dseek {
 		c:    c,
 		rest: resty.New(),
 	}
-	err := seek.freshToken()
+	err := seek.login()
 	if err != nil {
-		klog.Errorf("%s login failed: %v", seek.Name(), err)
+		klog.Errorf("%s: login failed: %v", seek.Name(), err)
 		return nil
 	}
 	return seek
@@ -96,12 +104,19 @@ func (d *Dseek) GenerateContent(ctx context.Context, messages []llms.MessageCont
 	if model != mux.TxtModel {
 		return nil, fmt.Errorf("not support model '%s'", model)
 	}
-	if d.clearHistory(d.token) != nil {
-		if err := d.freshToken(); err != nil {
-			klog.Errorf("fresh failed: %s", err)
+	uuid, err := d.newChat(d.token)
+	if err != nil {
+		if err := d.login(); err != nil {
+			klog.Errorf("login failed: %s", err)
 			return nil, err
+		} else {
+			uuid, _ := d.newChat(d.token)
+			if uuid == "" {
+				return nil, fmt.Errorf("can not chat")
+			}
 		}
 	}
+
 	var (
 		opt          = &llms.CallOptions{}
 		bctx, cancle = context.WithCancel(ctx)
@@ -111,7 +126,7 @@ func (d *Dseek) GenerateContent(ctx context.Context, messages []llms.MessageCont
 		o(opt)
 	}
 	defer cancle()
-	resp, err := d.chat(prompt)
+	resp, err := d.chat(prompt, uuid)
 	if err != nil {
 		return nil, err
 	}
@@ -135,6 +150,9 @@ func (d *Dseek) GenerateContent(ctx context.Context, messages []llms.MessageCont
 		if err != nil {
 			klog.Warningf("parse event data failed: %v", err)
 			continue
+		}
+		if d.c.Debug {
+			klog.Infof("data: %s", string(bytes.TrimPrefix(line, util.HeaderData)))
 		}
 		ret.Content = ""
 		ret.Err = nil
@@ -176,13 +194,17 @@ func (d *Dseek) Call(ctx context.Context, prompt string, options ...llms.CallOpt
 	return "", fmt.Errorf("not implement")
 }
 
-func (d *Dseek) freshToken() error {
+func (d *Dseek) login() error {
 	var (
-		url  = "https://chat.deepseek.com/api/v0/users/login"
-		data = &tokenResp{}
+		url                 = "https://chat.deepseek.com/api/v0/users/login"
+		data                = &tokenResp{}
+		req  *resty.Request = d.rest.R()
 	)
 
-	resp, err := d.rest.R().SetBody(map[string]any{
+	if d.c.Debug {
+		req = req.SetDebug(true)
+	}
+	resp, err := req.SetBody(map[string]any{
 		"email": d.c.Email, "password": d.c.Password,
 		"mobile": "", "area_code": "",
 		"device_id": d.c.DeviceId, "os": "web",
@@ -197,18 +219,21 @@ func (d *Dseek) freshToken() error {
 	return nil
 }
 
-func (d *Dseek) chat(prompt string) (*http.Response, error) {
-	var url = "https://chat.deepseek.com/api/v0/chat/completions"
+func (d *Dseek) chat(prompt string, uuid string) (*http.Response, error) {
+	var url = "https://chat.deepseek.com/api/v0/chat/completion"
 	// send prompt
 	body := map[string]any{
-		"message":     prompt,
-		"stream":      true,
-		"model_class": "deepseek_chat",
-		"temperature": 0,
+		"prompt":            prompt,
+		"parent_message_id": nil,
+		"chat_session_id":   uuid,
+		"ref_file_ids":      []string{},
 	}
 	data, err := json.Marshal(body)
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("json failed"), err)
+	}
+	if d.c.Debug {
+		klog.Infof("request body: %s", string(data))
 	}
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
 	if err != nil {
@@ -233,22 +258,32 @@ func (d *Dseek) chat(prompt string) (*http.Response, error) {
 	return resp, err
 }
 
-func (d *Dseek) clearHistory(token string) error {
-	var url = "https://chat.deepseek.com/api/v0/chat/clear_context"
+func (d *Dseek) newChat(token string) (string, error) {
+	var url = "https://chat.deepseek.com/api/v0/chat_session/create"
 	if token == "" {
-		return fmt.Errorf("token is null")
+		return "", fmt.Errorf("token is null")
 	}
-	resp, err := d.rest.R().SetBody(map[string]any{
-		"append_welcome_message": false,
-		"model_class":            "deepseek_chat",
-	}).SetHeaders(headers).SetHeader("Authorization", fmt.Sprintf("Bearer %s", token)).Post(url)
+	var (
+		req  *resty.Request = d.rest.R()
+		data                = &uuidResp{}
+	)
+
+	if d.c.Debug {
+		req = req.SetDebug(true)
+	}
+	resp, err := req.SetBody(map[string]any{
+		"agent": "chat",
+	}).SetHeaders(headers).SetHeader("Authorization", fmt.Sprintf("Bearer %s", token)).SetResult(data).Post(url)
 	if err != nil {
-		return errors.Join(io.EOF, err)
+		return "", errors.Join(io.EOF, err)
 	}
 	if !util.IsHttp20xCode(resp.StatusCode()) {
 		if resp.StatusCode()/100 == 4 {
-			return errors.Join(http.ErrNotSupported, fmt.Errorf("http code %v", resp.StatusCode()))
+			return "", errors.Join(http.ErrNotSupported, fmt.Errorf("http code %v", resp.StatusCode()))
 		}
 	}
-	return nil
+	if data.Data.BizData.Id == "" {
+		return "", fmt.Errorf("not found uuid")
+	}
+	return data.Data.BizData.Id, nil
 }

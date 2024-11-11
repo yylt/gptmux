@@ -9,6 +9,7 @@ import (
 	"github.com/yylt/gptmux/mux/merlin"
 	"github.com/yylt/gptmux/mux/ollama"
 	"github.com/yylt/gptmux/mux/rkllm"
+	"github.com/yylt/gptmux/mux/zhipu"
 	"github.com/yylt/gptmux/pkg/box"
 	"gopkg.in/yaml.v3"
 )
@@ -20,6 +21,7 @@ type Config struct {
 	Deepseek deepseek.Conf  `yaml:"deepseek,omitempty"`
 	Notify   box.NotifyConf `yaml:"notify,omitempty"`
 	Rkllm    rkllm.Conf     `yaml:"rkllm,omitempty"`
+	Zhipu    zhipu.Conf     `yaml:"zhipu,omitempty"`
 	Addr     string         `yaml:"address"`
 }
 
