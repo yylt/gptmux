@@ -227,6 +227,7 @@ func (d *Dseek) chat(prompt string, uuid string) (*http.Response, error) {
 		"parent_message_id": nil,
 		"chat_session_id":   uuid,
 		"ref_file_ids":      []string{},
+		"thinking_enabled":  false,
 	}
 	data, err := json.Marshal(body)
 	if err != nil {

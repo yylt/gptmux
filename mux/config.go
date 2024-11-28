@@ -86,3 +86,43 @@ func GeneraPrompt(messages []llms.MessageContent) (string, ChatModel) {
 
 	return buf.String(), m
 }
+
+// last system and the last human
+func NormalPrompt(messages []llms.MessageContent) []llms.MessageContent {
+	var (
+		ret []llms.MessageContent
+	)
+
+	for _, msg := range messages {
+		switch msg.Role {
+		case llms.ChatMessageTypeHuman:
+			leng := len(msg.Parts)
+			if leng < 1 {
+				return nil
+			}
+			txt := msg.Parts[leng-1].(llms.TextContent)
+			if !util.HasChineseChar(txt.Text) {
+				txt = llms.TextContent{
+					Text: "使用中文, " + txt.Text,
+				}
+			}
+
+			ret = append(ret, llms.MessageContent{
+				Role:  llms.ChatMessageTypeHuman,
+				Parts: []llms.ContentPart{txt},
+			})
+
+		case llms.ChatMessageTypeSystem:
+			leng := len(msg.Parts)
+			if leng < 1 {
+				continue
+			}
+			ret = append(ret, llms.MessageContent{
+				Role:  llms.ChatMessageTypeHuman,
+				Parts: []llms.ContentPart{msg.Parts[leng-1]},
+			})
+		default:
+		}
+	}
+	return ret
+}

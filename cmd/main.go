@@ -12,6 +12,7 @@ import (
 	"github.com/yylt/gptmux/mux"
 	"github.com/yylt/gptmux/mux/claude"
 	"github.com/yylt/gptmux/mux/deepseek"
+	"github.com/yylt/gptmux/mux/deepseekapi"
 	"github.com/yylt/gptmux/mux/merlin"
 	"github.com/yylt/gptmux/mux/zhipu"
 
@@ -50,6 +51,10 @@ func main() {
 	zp := zhipu.New(&cfg.Zhipu)
 	if zp != nil {
 		ms = append(ms, zp)
+	}
+	apidp := deepseekapi.New(&cfg.DeepseekApi)
+	if apidp != nil {
+		ms = append(ms, apidp)
 	}
 	ca := claude.New(ctx, &cfg.Claude, b)
 	if ca != nil {

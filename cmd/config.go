@@ -6,6 +6,7 @@ import (
 
 	"github.com/yylt/gptmux/mux/claude"
 	"github.com/yylt/gptmux/mux/deepseek"
+	"github.com/yylt/gptmux/mux/deepseekapi"
 	"github.com/yylt/gptmux/mux/merlin"
 	"github.com/yylt/gptmux/mux/ollama"
 	"github.com/yylt/gptmux/mux/rkllm"
@@ -15,14 +16,15 @@ import (
 )
 
 type Config struct {
-	Merlin   merlin.Config  `yaml:"merlin,omitempty"`
-	Claude   claude.Conf    `yaml:"claude,omitempty"`
-	Ollama   ollama.Config  `yaml:"ollama,omitempty"`
-	Deepseek deepseek.Conf  `yaml:"deepseek,omitempty"`
-	Notify   box.NotifyConf `yaml:"notify,omitempty"`
-	Rkllm    rkllm.Conf     `yaml:"rkllm,omitempty"`
-	Zhipu    zhipu.Conf     `yaml:"zhipu,omitempty"`
-	Addr     string         `yaml:"address"`
+	Merlin      merlin.Config    `yaml:"merlin,omitempty"`
+	Claude      claude.Conf      `yaml:"claude,omitempty"`
+	Ollama      ollama.Config    `yaml:"ollama,omitempty"`
+	Deepseek    deepseek.Conf    `yaml:"deepseek,omitempty"`
+	DeepseekApi deepseekapi.Conf `yaml:"deepseekapi,omitempty"`
+	Notify      box.NotifyConf   `yaml:"notify,omitempty"`
+	Rkllm       rkllm.Conf       `yaml:"rkllm,omitempty"`
+	Zhipu       zhipu.Conf       `yaml:"zhipu,omitempty"`
+	Addr        string           `yaml:"address"`
 }
 
 // LoadConfigmap reads configmap data from config-path
