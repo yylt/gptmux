@@ -31,6 +31,9 @@ func (c *instance) DeepCopy() *instance {
 		limit:       c.limit,
 	}
 }
+func (c *instance) String() string {
+	return fmt.Sprintf("user: %s, used: %d, limit: %d", c.user, c.used, c.limit)
+}
 
 func instCompare(a, b interface{}) int {
 	s1 := a.(*instance)
@@ -112,6 +115,6 @@ func (ic *instCtrl) run() {
 			}
 		}
 
-		<-time.NewTicker(interval).C
+		<-time.NewTimer(interval).C
 	}
 }

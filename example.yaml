@@ -1,26 +1,26 @@
 address: "127.0.0.1:7900"
-
-notify:
-  tang: x
-  gnotify:
-    server: x
-    app_id: 2
-    app_token: Ax
-    user: x
-    password: x
 ollama:
   server: x
   model_name: x
   index: 0
 deepseek:
-  email: xx@163.com
-  password: xx
+  deviceid: base64(code)
+  email: foo@bar.com
+  password: foo
+  debug: true
+  index: 3
+deepseekapi:
+  apikey: sk-xxx
+  index: 5
+zhipu:
+  apikey: foo.bar
   index: 4
 merlin:
+  index: 4
   authurl: xx
-  authkey: xx
   appurl: xx
   debug: true
+  proxy: http://127.0.0.1:1080
   users:
-  - name: xx
-    password: xx
+    - name: x
+      password: x

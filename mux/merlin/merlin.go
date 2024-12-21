@@ -103,7 +103,7 @@ func NewMerlinIns(cfg *Config) *Merlin {
 	if err != nil {
 		panic(err)
 	}
-	authurl, err := util.ParseUrl(cfg.Appurl)
+	authurl, err := util.ParseUrl(cfg.Authurl)
 	if err != nil {
 		panic(err)
 	}
@@ -202,6 +202,9 @@ func (m *Merlin) refresh(v *instance) error {
 	if err == nil {
 		err = m.usage(v)
 	}
+	if err == nil {
+		klog.Infof("access success: %s", v)
+	}
 	return err
 }
 
@@ -220,7 +223,7 @@ func (m *Merlin) usage(ins *instance) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	err = json.NewDecoder(resp.Body).Decode(status)
 	if err != nil {
 		return err
@@ -251,11 +254,13 @@ func (m *Merlin) access(ins *instance) error {
 		"authority":    m.authurl.Host,
 	})
 	if err != nil {
+		klog.Errorf("access authurl'%s' failed: %v", m.cfg.Authurl, err)
 		return err
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	err = json.NewDecoder(resp.Body).Decode(status)
 	if err != nil {
+		klog.Errorf("access authurl body: '%s' failed: %v", resp.Status, err)
 		return err
 	}
 
@@ -269,17 +274,19 @@ func (m *Merlin) access(ins *instance) error {
 
 	// accesstoken
 	bodys, _ = json.Marshal(tbody)
-	resp, err = request(turl, "POST", bodys, map[string]string{
+	appresp, err := request(turl, "POST", bodys, map[string]string{
 		"accept":       "*/*",
 		"content-type": "application/json",
 		"authority":    m.authurl.Host,
 	})
+	defer appresp.Body.Close()
 	if err != nil {
+		klog.Errorf("access appurl '%s' failed: %v", m.cfg.Appurl, err)
 		return err
 	}
-	resp.Body.Close()
-	err = json.NewDecoder(resp.Body).Decode(tstatus)
+	err = json.NewDecoder(appresp.Body).Decode(tstatus)
 	if err != nil {
+		klog.Errorf("access appurl body: '%s' failed: %v", appresp.Status, err)
 		return err
 	}
 
@@ -364,7 +371,7 @@ func (m *Merlin) chat(prompt string, mode mux.ChatModel, fn func(*http.Response)
 
 func request(address, method string, body []byte, headers map[string]string) (*http.Response, error) {
 	// send prompt
-	var buf *bytes.Buffer
+	var buf = &bytes.Buffer{}
 	if body != nil {
 		buf = bytes.NewBuffer(body)
 	}
