@@ -63,7 +63,7 @@ func NewInstControl(d time.Duration, ml *Merlin, user []*user) *instCtrl {
 		}
 		err := ml.refresh(in)
 		if err != nil {
-			klog.Warning(err, fmt.Sprintf(", not valid user: %s", in.user))
+			klog.Warningf("not valid user(%s), failed: %v", in.user, err)
 			continue
 		}
 		queue.Enqueue(in)

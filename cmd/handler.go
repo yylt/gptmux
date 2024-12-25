@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"sort"
@@ -52,59 +51,16 @@ func NewController(ctx context.Context, debug bool, ms ...mux.Model) *Controller
 // 创建完成
 func (ca *Controller) V1CompletionsPost(c *gin.Context) {
 	var (
-		body = api.V1CompletionsPostRequest{}
+		body = &api.V1CompletionsPostRequest{}
 	)
-	err := c.ShouldBindJSON(&body)
+	err := c.ShouldBindJSON(body)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
-
-	var (
-		opt = option(body)
-		ret = &api.V1CompletionsPost200Response{
-			Id:      "Controllercmpl",
-			Object:  "Controller.completion",
-			Created: int32(time.Now().UTC().Unix()),
-		}
-		errors []error
-	)
-	buf := util.GetBuf()
-	defer func() {
-		klog.V(4).Infof("response data: %s", buf.String())
-		util.PutBuf(buf)
-	}()
-
-	if body.Stream {
-		opt = append(opt, llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-			defer func() {
-				c.Writer.Header().Add("Content-Type", "text/event-stream")
-				c.Writer.Flush()
-			}()
-			if len(chunk) > 0 {
-				ret.Choices = []api.V1CompletionsPost200ResponseChoicesInner{
-					{Text: string(chunk)},
-				}
-				buf.Write(chunk)
-				c.SSEvent(msgType, ret)
-			}
-			select {
-			case <-c.Writer.CloseNotify():
-				c.SSEvent(msgType, "[DONE]")
-				return io.EOF
-			case <-ctx.Done():
-				c.SSEvent(msgType, "[DONE]")
-				return io.EOF
-			default:
-			}
-			return nil
-		}))
-	}
-
+	klog.Infof("request: %v", body)
+	c.AbortWithError(http.StatusInternalServerError, nil)
 	//TODO: 遍历
-	if len(errors) == len(ca.chats) {
-		c.AbortWithError(http.StatusInternalServerError, nil)
-	}
 
 }
 
@@ -131,9 +87,14 @@ func (ca *Controller) V1ChatCompletionsPost(c *gin.Context) {
 		}
 		errors []error
 	)
+	if ca.debug {
+		klog.Infof("request: stream(%v), msgs(%v)", body.Stream, message)
+	}
 	buf := util.GetBuf()
 	defer func() {
-		klog.V(4).Infof("response data: %s", buf.String())
+		if ca.debug {
+			klog.Infof("response: %s", buf.String())
+		}
 		util.PutBuf(buf)
 	}()
 
@@ -183,8 +144,6 @@ func (ca *Controller) V1ChatCompletionsPost(c *gin.Context) {
 						},
 					},
 				}
-				req, _ := json.Marshal(ret)
-				klog.V(3).Infof("response data: %s", string(req))
 				c.JSON(http.StatusOK, ret)
 			}
 			break
