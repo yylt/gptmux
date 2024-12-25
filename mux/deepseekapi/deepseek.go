@@ -54,7 +54,25 @@ func (d *Dseek) Index() int {
 func (d *Dseek) GenerateContent(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
 	msg := mux.NormalPrompt(messages)
 	if msg != nil {
-		return d.LLM.GenerateContent(ctx, msg, options...)
+		var (
+			opt          = &llms.CallOptions{}
+			bctx, cancle = context.WithCancel(ctx)
+		)
+		for _, o := range options {
+			o(opt)
+		}
+		defer func() {
+			cancle()
+			if opt.StreamingFunc != nil {
+				opt.StreamingFunc(bctx, nil)
+			}
+		}()
+
+		data, err := d.LLM.GenerateContent(ctx, msg, options...)
+		if err != nil {
+			klog.Errorf("deepseek api err: %v", err)
+		}
+		return data, nil
 	}
 	return nil, nil
 }
