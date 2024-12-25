@@ -70,10 +70,9 @@ type Dseek struct {
 
 func New(c *Conf) *Dseek {
 	if c == nil || c.Email == "" || c.Password == "" {
-		klog.Infof("deepseek config is null")
+		klog.Warningf("deepseek config is invalid: %v", c)
 		return nil
 	}
-	klog.Infof("deepseek config is: %#v", c)
 	seek := &Dseek{
 		c:    c,
 		rest: resty.New(),

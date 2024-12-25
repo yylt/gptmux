@@ -96,7 +96,6 @@ func (d *Zp) GenerateContent(ctx context.Context, messages []llms.MessageContent
 
 		err = json.Unmarshal(bytes.TrimPrefix(line, util.HeaderData), &respData)
 		if err != nil {
-			klog.Warningf("parse event data failed: %v, content: %s", err, string(bytes.TrimPrefix(line, util.HeaderData)))
 			continue
 		}
 		if d.c.Debug {

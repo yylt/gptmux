@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"sync"
 	"time"
 
@@ -29,9 +28,7 @@ var (
 		"accept-language": "zh-CN,zh;q=0.9,en;q=0.8,zh-Hans;q=0.7",
 	}
 
-	defaultClient = http.Client{
-		Transport: http.DefaultTransport,
-	}
+	defaultClient *http.Client
 
 	name = "merlin"
 )
@@ -64,8 +61,9 @@ type model struct {
 
 type Config struct {
 	Index   int     `yaml:"index,omitempty"`
+	Proxy   string  `yaml:"proxy,omitempty"`
+	Debug   bool    `yaml:"debug,omitempty"`
 	Authurl string  `yaml:"authurl"`
-	Authkey string  `yaml:"authkey"`
 	Appurl  string  `yaml:"appurl"`
 	Users   []*user `yaml:"users"`
 	Model   model   `yaml:"model,omitempty"`
@@ -88,31 +86,19 @@ func (c *Config) imageModel() string {
 type Merlin struct {
 	cfg *Config
 
-	authurl *url.URL
-	appurl  *url.URL
-
 	instctrl *instCtrl
 }
 
 func NewMerlinIns(cfg *Config) *Merlin {
-	if cfg == nil || cfg.Users == nil {
-		klog.Errorf("merlin config is invalid, user is null")
+	if cfg == nil || cfg.Users == nil || cfg.Authurl == "" || cfg.Appurl == "" {
+		klog.Errorf("merlin config is invalid: %v", cfg)
 		return nil
 	}
-	appurl, err := util.ParseUrl(cfg.Appurl)
-	if err != nil {
-		panic(err)
-	}
-	authurl, err := util.ParseUrl(cfg.Authurl)
-	if err != nil {
-		panic(err)
-	}
-
 	ml := &Merlin{
-		cfg:     cfg,
-		authurl: authurl,
-		appurl:  appurl,
+		cfg: cfg,
 	}
+	defaultClient = util.NewDebugHTTPClient(cfg.Proxy, cfg.Debug)
+
 	ml.instctrl = NewInstControl(time.Minute*55, ml, cfg.Users)
 	if ml.instctrl.Size() == 0 {
 		return nil
@@ -212,12 +198,11 @@ func (m *Merlin) refresh(v *instance) error {
 func (m *Merlin) usage(ins *instance) error {
 	var (
 		status = &UserResp{}
-		surl   = fmt.Sprintf("https://%s/status?firebaseToken=%s&from=DASHBOARD", m.cfg.Appurl, ins.idtoken)
+		surl   = fmt.Sprintf("%s/status?firebaseToken=%s&from=DASHBOARD", m.cfg.Appurl, ins.idtoken)
 	)
 
 	resp, err := request(surl, "GET", nil, map[string]string{
 		"accept":        "*/*",
-		"authority":     m.authurl.Host,
 		"Authorization": "Bearer " + ins.idtoken,
 	})
 	if err != nil {
@@ -244,23 +229,21 @@ func (m *Merlin) access(ins *instance) error {
 			"password":          ins.password,
 			"clientType":        "CLIENT_TYPE_WEB",
 		}
-		surl = fmt.Sprintf("https://%s/v1/accounts:signInWithPassword?key=%s", m.cfg.Authurl, m.cfg.Authkey)
+		surl = m.cfg.Authurl
 	)
 	// idtoken
 	bodys, _ := json.Marshal(body)
 	resp, err := request(surl, "POST", bodys, map[string]string{
 		"accept":       "*/*",
 		"content-type": "application/json",
-		"authority":    m.authurl.Host,
 	})
 	if err != nil {
-		klog.Errorf("access authurl'%s' failed: %v", m.cfg.Authurl, err)
+		klog.Errorf("access id failed: %v", err)
 		return err
 	}
 	defer resp.Body.Close()
 	err = json.NewDecoder(resp.Body).Decode(status)
 	if err != nil {
-		klog.Errorf("access authurl body: '%s' failed: %v", resp.Status, err)
 		return err
 	}
 
@@ -269,7 +252,7 @@ func (m *Merlin) access(ins *instance) error {
 		tbody   = map[string]interface{}{
 			"token": status.IdToken,
 		}
-		turl = fmt.Sprintf("https://%s/session/get", m.cfg.Appurl)
+		turl = fmt.Sprintf("%s/session/get", m.cfg.Appurl)
 	)
 
 	// accesstoken
@@ -277,16 +260,14 @@ func (m *Merlin) access(ins *instance) error {
 	appresp, err := request(turl, "POST", bodys, map[string]string{
 		"accept":       "*/*",
 		"content-type": "application/json",
-		"authority":    m.authurl.Host,
 	})
-	defer appresp.Body.Close()
 	if err != nil {
-		klog.Errorf("access appurl '%s' failed: %v", m.cfg.Appurl, err)
+		klog.Errorf("access token failed: %v", err)
 		return err
 	}
+	defer appresp.Body.Close()
 	err = json.NewDecoder(appresp.Body).Decode(tstatus)
 	if err != nil {
-		klog.Errorf("access appurl body: '%s' failed: %v", appresp.Status, err)
 		return err
 	}
 
@@ -332,11 +313,11 @@ func (m *Merlin) chat(prompt string, mode mux.ChatModel, fn func(*http.Response)
 	)
 	switch mode {
 	case mux.TxtModel:
-		url = fmt.Sprintf("https://%s/thread?customJWT=true&version=1.1", m.cfg.Appurl)
+		url = fmt.Sprintf("%s/thread/unified?version=1.1", m.cfg.Appurl)
 		body = chatBody(prompt, m.cfg.textModel())
 		least = 1
 	case mux.ImgModel:
-		url = fmt.Sprintf("https://%s/thread/image-generation?customJWT=true", m.cfg.Appurl)
+		url = fmt.Sprintf("%s/thread/image-generation", m.cfg.Appurl)
 		body = imageBody(prompt, m.cfg.imageModel())
 		least = 10
 	default:
@@ -356,12 +337,11 @@ func (m *Merlin) chat(prompt string, mode mux.ChatModel, fn func(*http.Response)
 	if err != nil {
 		return fmt.Errorf("marshal body failed :%v", err)
 	}
-	resp, err := request("post", url, bodystr, map[string]string{
-		"authority":     m.authurl.Host,
+	resp, err := request(url, "post", bodystr, map[string]string{
 		"Accept":        "text/event-stream",
 		"Connection":    "keep-alive",
 		"content-type":  "application/json",
-		"Authorization": "Bearer " + cu.accesstoken,
+		"Authorization": "Bearer " + cu.idtoken,
 	})
 	if err != nil {
 		return err

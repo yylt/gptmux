@@ -14,13 +14,11 @@ import (
 	"github.com/yylt/gptmux/mux/deepseek"
 	"github.com/yylt/gptmux/mux/deepseekapi"
 	"github.com/yylt/gptmux/mux/merlin"
+	"github.com/yylt/gptmux/mux/ollama"
+	"github.com/yylt/gptmux/mux/rkllm"
+	"github.com/yylt/gptmux/mux/silicon"
 	"github.com/yylt/gptmux/mux/zhipu"
 
-	"github.com/yylt/gptmux/mux/rkllm"
-
-	"github.com/yylt/gptmux/mux/ollama"
-
-	"github.com/yylt/gptmux/pkg/box"
 	"k8s.io/klog/v2"
 )
 
@@ -35,8 +33,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	b := box.New(&cfg.Notify)
-
 	ctx := SetupSignalHandler()
 
 	var ms []mux.Model
@@ -56,7 +52,7 @@ func main() {
 	if apidp != nil {
 		ms = append(ms, apidp)
 	}
-	ca := claude.New(ctx, &cfg.Claude, b)
+	ca := claude.New(ctx, &cfg.Claude)
 	if ca != nil {
 		ms = append(ms, ca)
 	}
@@ -69,7 +65,11 @@ func main() {
 	if ollm != nil {
 		ms = append(ms, ollm)
 	}
-	chat := NewChat(ctx, ms...)
+	sili := silicon.New(ctx, &cfg.Silicon)
+	if sili != nil {
+		ms = append(ms, sili)
+	}
+	chat := NewController(ctx, cfg.Debug, ms...)
 
 	muxhandler := openapi.ApiHandleFunctions{
 		ChatAPI:        chat,

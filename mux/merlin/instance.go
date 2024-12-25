@@ -10,7 +10,7 @@ import (
 
 var (
 	defaultImageModel = "Dreamshape v7"
-	defaultChatModel  = "claude-3-haiku"
+	defaultChatModel  = "gpt-4o-mini"
 )
 
 type instance struct {

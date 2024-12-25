@@ -68,14 +68,11 @@ var (
 )
 
 func New(c *Conf) *rkllm {
-	mpath := c.ModelPath
-	lib := c.Lib
-
-	if lib == "" || mpath == "" {
-		klog.Warningf("rkllm init failed: invalid config")
+	if c == nil || c.ModelPath == "" || c.Lib == "" {
+		klog.Warningf("rkllm config is invalid: %v", c)
 		return nil
 	}
-	libc, err := purego.Dlopen(lib, purego.RTLD_DEFAULT|purego.RTLD_NOW|purego.RTLD_GLOBAL)
+	libc, err := purego.Dlopen(c.Lib, purego.RTLD_DEFAULT|purego.RTLD_NOW|purego.RTLD_GLOBAL)
 	if err != nil {
 		panic(err)
 	}
@@ -86,7 +83,7 @@ func New(c *Conf) *rkllm {
 	purego.RegisterLibFunc(&rkllm_abort, libc, "rkllm_abort")
 
 	pa := &param{
-		model_path:        mpath,
+		model_path:        c.ModelPath,
 		num_npu_core:      3,
 		max_context_len:   4096,
 		max_new_tokens:    10240,

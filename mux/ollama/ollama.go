@@ -49,7 +49,8 @@ type ollm struct {
 }
 
 func New(ctx context.Context, cfg *Config) *ollm {
-	if cfg == nil {
+	if cfg == nil || cfg.Server == "" || cfg.Model == "" {
+		klog.Warningf("ollama config is invalid: %v", cfg)
 		return nil
 	}
 	u, err := url.Parse(cfg.Server)

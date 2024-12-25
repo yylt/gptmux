@@ -10,8 +10,8 @@ import (
 	"github.com/yylt/gptmux/mux/merlin"
 	"github.com/yylt/gptmux/mux/ollama"
 	"github.com/yylt/gptmux/mux/rkllm"
+	"github.com/yylt/gptmux/mux/silicon"
 	"github.com/yylt/gptmux/mux/zhipu"
-	"github.com/yylt/gptmux/pkg/box"
 	"gopkg.in/yaml.v3"
 )
 
@@ -21,10 +21,11 @@ type Config struct {
 	Ollama      ollama.Config    `yaml:"ollama,omitempty"`
 	Deepseek    deepseek.Conf    `yaml:"deepseek,omitempty"`
 	DeepseekApi deepseekapi.Conf `yaml:"deepseekapi,omitempty"`
-	Notify      box.NotifyConf   `yaml:"notify,omitempty"`
 	Rkllm       rkllm.Conf       `yaml:"rkllm,omitempty"`
 	Zhipu       zhipu.Conf       `yaml:"zhipu,omitempty"`
+	Silicon     silicon.Conf     `yaml:"silicon,omitempty"`
 	Addr        string           `yaml:"address"`
+	Debug       bool             `yaml:"debug"`
 }
 
 // LoadConfigmap reads configmap data from config-path

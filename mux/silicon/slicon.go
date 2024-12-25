@@ -1,4 +1,4 @@
-package deepseekapi
+package silicon
 
 import (
 	"context"
@@ -14,51 +14,60 @@ import (
 type Conf struct {
 	// chat
 	Apikey string `yaml:"apikey"`
+	Model  string `yaml:"model"`
 	Debug  bool   `yaml:"debug,omitempty"`
 	Index  int    `yaml:"index,omitempty"`
 }
 
-type Dseek struct {
+type Sli struct {
 	c *Conf
 
 	*openai.LLM
 }
 
-func New(c *Conf) *Dseek {
+func New(ctx context.Context, c *Conf) *Sli {
 	if c == nil || c.Apikey == "" {
-		klog.Warningf("deepseek api config is invalid: %v", c)
+		klog.Infof("silicon config is invalid: %v", c)
 		return nil
 	}
 
 	llm, err := openai.New(
-		openai.WithBaseURL("https://api.deepseek.com"),
+		openai.WithBaseURL("https://api.siliconflow.com"),
 		openai.WithToken(c.Apikey),
-		openai.WithModel("deepseek-chat"),
+		openai.WithModel(c.Model),
 		openai.WithHTTPClient(util.NewDebugHTTPClient("", c.Debug)),
 	)
+
 	if err != nil {
-		klog.Errorf("deepseek api err: %v", err)
+		klog.Errorf("silicon api err: %v", err)
 		return nil
 	}
-	seek := &Dseek{
+
+	slicon := &Sli{
 		c:   c,
 		LLM: llm,
 	}
-	return seek
+	return slicon
 }
 
-func (d *Dseek) Name() string {
-	return "deepseek-api"
+func (d *Sli) Name() string {
+	return "silicon-api"
 }
 
-func (d *Dseek) Index() int {
+func (d *Sli) Index() int {
 	return d.c.Index
 }
-func (d *Dseek) GenerateContent(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
+
+func (d *Sli) Completion(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (string, error) {
+	return "", fmt.Errorf("not found message")
+}
+
+func (d *Sli) GenerateContent(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
 	msg := mux.NormalPrompt(messages)
 	if msg == nil {
-		return nil, fmt.Errorf("no messages")
+		return nil, fmt.Errorf("not found message")
 	}
+
 	var (
 		opt          = &llms.CallOptions{}
 		bctx, cancle = context.WithCancel(ctx)
@@ -75,5 +84,4 @@ func (d *Dseek) GenerateContent(ctx context.Context, messages []llms.MessageCont
 	}()
 
 	return d.LLM.GenerateContent(ctx, msg, options...)
-
 }
