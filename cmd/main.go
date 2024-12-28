@@ -12,11 +12,10 @@ import (
 	"github.com/yylt/gptmux/mux"
 	"github.com/yylt/gptmux/mux/claude"
 	"github.com/yylt/gptmux/mux/deepseek"
-	"github.com/yylt/gptmux/mux/deepseekapi"
 	"github.com/yylt/gptmux/mux/merlin"
 	"github.com/yylt/gptmux/mux/ollama"
+	"github.com/yylt/gptmux/mux/openai"
 	"github.com/yylt/gptmux/mux/rkllm"
-	"github.com/yylt/gptmux/mux/silicon"
 	"github.com/yylt/gptmux/mux/zhipu"
 
 	"k8s.io/klog/v2"
@@ -48,7 +47,7 @@ func main() {
 	if zp != nil {
 		ms = append(ms, zp)
 	}
-	apidp := deepseekapi.New(&cfg.DeepseekApi)
+	apidp := openai.New(ctx, &cfg.DeepseekApi)
 	if apidp != nil {
 		ms = append(ms, apidp)
 	}
@@ -65,7 +64,7 @@ func main() {
 	if ollm != nil {
 		ms = append(ms, ollm)
 	}
-	sili := silicon.New(ctx, &cfg.Silicon)
+	sili := openai.New(ctx, &cfg.Silicon)
 	if sili != nil {
 		ms = append(ms, sili)
 	}
