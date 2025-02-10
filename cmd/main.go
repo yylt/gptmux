@@ -63,6 +63,7 @@ func main() {
 	ollm := ollama.New(ctx, &cfg.Ollama)
 	if ollm != nil {
 		ms = append(ms, ollm)
+
 	}
 	sili := openai.New(ctx, &cfg.Silicon)
 	if sili != nil {

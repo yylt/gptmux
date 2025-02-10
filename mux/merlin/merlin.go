@@ -114,6 +114,59 @@ func (m *Merlin) Index() int {
 	return m.cfg.Index
 }
 
+func (m *Merlin) Completion(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
+	var (
+		opt          = &llms.CallOptions{}
+		bctx, cancle = context.WithCancel(ctx)
+		err          error
+		buf          = util.GetBuf()
+	)
+	for _, o := range options {
+		o(opt)
+	}
+	defer util.PutBuf(buf)
+	err = m.chat(prompt, mux.TxtModel, func(resp *http.Response) error {
+		var (
+			respData = &EventResp{}
+
+			ret  *pkg.BackResp
+			err  error
+			body = resp.Body
+			once sync.Once
+		)
+		defer body.Close()
+		scanner := bufio.NewScanner(body)
+		for scanner.Scan() {
+			line := scanner.Bytes()
+			if !bytes.HasPrefix(line, util.HeaderData) {
+				continue
+			}
+			err = json.Unmarshal(bytes.TrimPrefix(line, util.HeaderData), &respData)
+			if err != nil {
+				klog.Warningf("parse event data failed: %v", err)
+				continue
+			}
+			ret = textProcess(respData)
+			if ret == nil {
+				continue
+			}
+			buf.WriteString(ret.Content)
+			if ret.Err != nil {
+				once.Do(cancle)
+			}
+			if opt.StreamingFunc != nil {
+				err = opt.StreamingFunc(bctx, []byte(ret.Content))
+				if err != nil {
+					once.Do(cancle)
+					return err
+				}
+			}
+		}
+		return nil
+	})
+	return buf.String(), err
+}
+
 func (m *Merlin) GenerateContent(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
 	var (
 		opt          = &llms.CallOptions{}

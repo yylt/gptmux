@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -23,7 +25,7 @@ type Controller struct {
 	ctx   context.Context
 	debug bool
 	// v1 completions
-	fims []mux.Model
+	fims []mux.FimModel
 
 	// chat completions
 	chats []mux.Model
@@ -51,44 +53,17 @@ func NewController(ctx context.Context, debug bool, ms ...mux.Model) *Controller
 // 创建完成
 func (ca *Controller) V1CompletionsPost(c *gin.Context) {
 	var (
-		body = &api.V1CompletionsPostRequest{}
+		body      = &api.V1CompletionsPostRequest{}
+		reterrors []error
 	)
-	err := c.ShouldBindJSON(body)
+
+	err := c.ShouldBindBodyWithJSON(body)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
-	klog.Infof("request: %v", body)
-	c.AbortWithError(http.StatusInternalServerError, nil)
-	//TODO: 遍历
-
-}
-
-// V1ControllerCompletionsPost Post /v1/chat/completions
-// 创建聊天补全
-func (ca *Controller) V1ChatCompletionsPost(c *gin.Context) {
-	var (
-		body = &api.V1ChatCompletionsPostRequest{}
-	)
-	err := c.ShouldBindJSON(body)
-	if err != nil {
-		klog.Errorf("bind json failed: %v, body: %s", err, c.Request.Body)
-		c.AbortWithError(http.StatusBadRequest, err)
-		return
-	}
-
-	var (
-		opt     = option(body)
-		message = makePrompt(body)
-		ret     = &api.V1ChatCompletionsPost200Response{
-			Id:      "Controllercmpl",
-			Object:  "Controller.completion",
-			Created: int32(time.Now().UTC().Unix()),
-		}
-		errors []error
-	)
 	if ca.debug {
-		klog.Infof("request: stream(%v), msgs(%v)", body.Stream, message)
+		klog.Infof("request: %#v", body)
 	}
 	buf := util.GetBuf()
 	defer func() {
@@ -97,6 +72,22 @@ func (ca *Controller) V1ChatCompletionsPost(c *gin.Context) {
 		}
 		util.PutBuf(buf)
 	}()
+	var (
+		ret = &api.V1CompletionsPost200Response{
+			Id:      "Controllercmpl",
+			Object:  "Controller.completion",
+			Created: int32(time.Now().UTC().Unix()),
+			Model:   body.Model,
+		}
+		prompt = completionPrompt(body)
+		opt    = []llms.CallOption{
+			llms.WithTemperature(float64(body.Temperature)),
+			llms.WithTopP(float64(body.TopP)),
+			llms.WithPresencePenalty(float64(body.PresencePenalty)),
+			llms.WithFrequencyPenalty(float64(body.FrequencyPenalty)),
+			llms.WithMetadata(map[string]interface{}{mux.ReqBody: body}),
+		}
+	)
 
 	if body.Stream {
 		opt = append(opt, llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
@@ -104,18 +95,17 @@ func (ca *Controller) V1ChatCompletionsPost(c *gin.Context) {
 				c.Writer.Header().Add("Content-Type", "text/event-stream")
 				c.Writer.Flush()
 			}()
-			if len(chunk) > 0 {
-				ret.Choices = []api.V1ChatCompletionsPost200ResponseChoicesInner{
-					{
-						Delta: api.V1ChatCompletionsPost200ResponseChoicesInnerDelta{
-							Role:    mux.RoleAssistant,
-							Content: string(chunk),
-						},
-					},
-				}
-				buf.Write(chunk)
-				c.SSEvent(msgType, ret)
+
+			ret.Choices = []api.V1CompletionsPost200ResponseChoicesInner{
+				{
+					Index:        1,
+					Text:         string(chunk),
+					FinishReason: "1",
+				},
 			}
+			buf.Write(chunk)
+			c.SSEvent(msgType, ret)
+
 			select {
 			case <-c.Writer.CloseNotify():
 				c.SSEvent(msgType, "[DONE]")
@@ -130,8 +120,110 @@ func (ca *Controller) V1ChatCompletionsPost(c *gin.Context) {
 	}
 
 	for _, m := range ca.chats {
-		data, err := m.GenerateContent(ca.ctx, message, opt...)
-		if err == io.EOF || err == nil {
+		fm, ok := m.(mux.FimModel)
+		if !ok {
+			reterrors = append(reterrors, fmt.Errorf("model '%s' not support", m.Name()))
+			klog.Warningf("model '%s' not support completion", m.Name())
+			continue
+		}
+		data, err := fm.Completion(ca.ctx, prompt, opt...)
+		if err == nil || errors.Is(err, io.EOF) {
+			klog.Infof("model '%s' success", m.Name())
+			if !body.Stream {
+				ret.Choices = []api.V1CompletionsPost200ResponseChoicesInner{
+					{
+						Text: string(data),
+					},
+				}
+				c.JSON(http.StatusOK, ret)
+			}
+			break
+		} else {
+			reterrors = append(reterrors, err)
+			klog.Warningf("model '%s' failed: %v", m.Name(), err)
+		}
+	}
+	if len(reterrors) == len(ca.chats) {
+		c.AbortWithError(http.StatusInternalServerError, nil)
+	}
+}
+
+// V1ControllerCompletionsPost Post /v1/chat/completions
+// 创建聊天补全
+func (ca *Controller) V1ChatCompletionsPost(c *gin.Context) {
+	var (
+		body         = &api.V1ChatCompletionsPostRequest{}
+		rctx, cancle = context.WithCancel(c.Request.Context())
+	)
+	defer cancle()
+	err := c.ShouldBindBodyWithJSON(body)
+
+	if err != nil {
+		klog.Errorf("bind json failed: %v, body: %s", err, c.Request.Body)
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+	var (
+		opt = []llms.CallOption{
+			llms.WithTemperature(float64(body.Temperature)),
+			llms.WithTopP(float64(body.TopP)),
+			llms.WithPresencePenalty(float64(body.PresencePenalty)),
+			llms.WithFrequencyPenalty(float64(body.FrequencyPenalty)),
+			llms.WithMetadata(map[string]interface{}{mux.ReqBody: body}),
+		}
+
+		message = makePrompt(body)
+		ret     = &api.V1ChatCompletionsPost200Response{
+			Id:      "Controllercmpl",
+			Object:  "Controller.completion",
+			Created: int32(time.Now().UTC().Unix()),
+			Model:   body.Model,
+		}
+		reterrs []error
+	)
+	if ca.debug {
+		klog.Infof("request body: %v", body)
+	}
+	buf := util.GetBuf()
+	defer func() {
+		util.PutBuf(buf)
+	}()
+	if body.Stream {
+		opt = append(opt, llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
+			defer func() {
+				c.Writer.Header().Add("Content-Type", "text/event-stream")
+				c.Writer.Flush()
+			}()
+
+			ret.Choices = []api.V1ChatCompletionsPost200ResponseChoicesInner{
+				{
+					Index: 1,
+					Delta: api.V1ChatCompletionsPost200ResponseChoicesInnerDelta{
+						Role:    mux.RoleAssistant,
+						Content: string(chunk),
+					},
+					FinishReason: "1",
+				},
+			}
+			buf.Write(chunk)
+			c.SSEvent(msgType, ret)
+			select {
+			case <-c.Writer.CloseNotify():
+				cancle()
+				c.SSEvent(msgType, "[DONE]")
+				return io.EOF
+			case <-ctx.Done():
+				c.SSEvent(msgType, "[DONE]")
+				return io.EOF
+			default:
+			}
+			return nil
+		}))
+	}
+
+	for _, m := range ca.chats {
+		data, err := m.GenerateContent(rctx, message, opt...)
+		if err == nil || errors.Is(err, io.EOF) {
 			klog.Infof("model '%s' success", m.Name())
 			if !body.Stream {
 				for _, v := range data.Choices {
@@ -139,6 +231,7 @@ func (ca *Controller) V1ChatCompletionsPost(c *gin.Context) {
 				}
 				ret.Choices = []api.V1ChatCompletionsPost200ResponseChoicesInner{
 					{
+						//Index: 0,
 						Message: api.V1ChatCompletionsPost200ResponseChoicesInnerDelta{
 							Content: buf.String(),
 						},
@@ -148,11 +241,11 @@ func (ca *Controller) V1ChatCompletionsPost(c *gin.Context) {
 			}
 			break
 		} else {
-			errors = append(errors, err)
+			reterrs = append(reterrs, err)
 			klog.Warningf("model '%s' failed: %v", m.Name(), err)
 		}
 	}
-	if len(errors) == len(ca.chats) {
+	if len(reterrs) == len(ca.chats) {
 		c.AbortWithError(http.StatusInternalServerError, nil)
 	}
 }
@@ -189,7 +282,16 @@ func (ca *Controller) V1ModelsModelGet(c *gin.Context) {
 // V1ModelsModelidGet Get /v1/models/:modelid
 // 检索模型
 func (ca *Controller) V1ModelsModelidGet(c *gin.Context) {
+
 	api.DefaultHandleFunc(c)
+}
+
+func completionPrompt(req *api.V1CompletionsPostRequest) string {
+	return fmt.Sprintf(`
+	<prefix>%s<prefix>
+	<suffix>%s<suffix>
+	补全<prefix>和<suffix>之间的内容，直接输出补全后的内容，不要包含prefix和suffix
+	`, req.Prompt, req.Suffix)
 }
 
 func makePrompt(req *api.V1ChatCompletionsPostRequest) []llms.MessageContent {
@@ -226,29 +328,4 @@ func makePrompt(req *api.V1ChatCompletionsPostRequest) []llms.MessageContent {
 		ret = append(ret, v)
 	}
 	return ret
-}
-
-func option(body any) []llms.CallOption {
-	var (
-		opt []llms.CallOption
-	)
-	switch body.(type) {
-	case *api.V1ChatCompletionsPostRequest:
-		completion := body.(*api.V1ChatCompletionsPostRequest)
-		opt = []llms.CallOption{
-			llms.WithTemperature(float64(completion.Temperature)),
-			llms.WithTopP(float64(completion.TopP)),
-			llms.WithPresencePenalty(float64(completion.PresencePenalty)),
-			llms.WithFrequencyPenalty(float64(completion.FrequencyPenalty)),
-		}
-	case *api.V1CompletionsPostRequest:
-		completion := body.(*api.V1CompletionsPostRequest)
-		opt = []llms.CallOption{
-			llms.WithTemperature(float64(completion.Temperature)),
-			llms.WithTopP(float64(completion.TopP)),
-			llms.WithPresencePenalty(float64(completion.PresencePenalty)),
-			llms.WithFrequencyPenalty(float64(completion.FrequencyPenalty)),
-		}
-	}
-	return opt
 }

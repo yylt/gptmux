@@ -1,5 +1,9 @@
 package pkg
 
+import (
+	api "github.com/yylt/gptmux/api/go"
+)
+
 // backend response
 type BackResp struct {
 	Err     error
@@ -59,4 +63,13 @@ func GetContent(req *ChatReq, finish bool, content string) *ChatResp {
 		})
 	}
 	return resp
+}
+
+func Trans(src *api.V1CompletionsPostRequest, dst *api.V1ChatCompletionsPostRequest) {
+	if src == nil || dst == nil {
+		return
+	}
+	dst.FrequencyPenalty = src.FrequencyPenalty
+	dst.N = src.N
+	dst.TopP = src.TopP
 }

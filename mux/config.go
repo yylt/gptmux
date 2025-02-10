@@ -1,6 +1,7 @@
 package mux
 
 import (
+	"context"
 	"unicode/utf8"
 
 	"github.com/tmc/langchaingo/llms"
@@ -11,12 +12,15 @@ type ChatModel string
 
 const (
 	RoleAssistant = "assistant"
-	RoleUser      = "user"
-	RoleSystem    = "system"
+
+	RoleUser   = "user"
+	RoleSystem = "system"
 
 	NonModel ChatModel = ""
 	ImgModel ChatModel = "image"
 	TxtModel ChatModel = "text"
+
+	ReqBody = "req"
 )
 
 var (
@@ -29,6 +33,9 @@ type Model interface {
 	Name() string
 	Index() int
 }
+type FimModel interface {
+	Completion(ctx context.Context, prompt string, options ...llms.CallOption) (string, error)
+}
 
 // system and the last human
 func GeneraPrompt(messages []llms.MessageContent) (string, ChatModel) {
@@ -36,8 +43,7 @@ func GeneraPrompt(messages []llms.MessageContent) (string, ChatModel) {
 		m           = TxtModel
 		buf         = util.GetBuf()
 		txt, prefix llms.TextContent
-
-		iszh bool
+		iszh        bool
 	)
 	defer util.PutBuf(buf)
 	for _, msg := range messages {
@@ -58,6 +64,7 @@ func GeneraPrompt(messages []llms.MessageContent) (string, ChatModel) {
 			}
 
 		case llms.ChatMessageTypeSystem:
+
 			leng := len(msg.Parts)
 			if leng < 1 {
 				continue
@@ -74,15 +81,14 @@ func GeneraPrompt(messages []llms.MessageContent) (string, ChatModel) {
 	}
 
 	if prefix.Text != "" {
-		buf.WriteString(prefix.Text + "\n")
-	}
-
-	if m == TxtModel && !iszh {
-		if !util.HasChineseChar(txt.Text) {
-			buf.WriteString("使用中文, ")
-		}
+		buf.WriteString(prefix.Text + "\r\n")
 	}
 	buf.WriteString(txt.Text)
+	if m == TxtModel && !iszh {
+		if !util.HasChineseChar(txt.Text) {
+			buf.WriteString("\r\n请使用中文回答")
+		}
+	}
 
 	return buf.String(), m
 }
@@ -100,16 +106,9 @@ func NormalPrompt(messages []llms.MessageContent) []llms.MessageContent {
 			if leng < 1 {
 				return nil
 			}
-			txt := msg.Parts[leng-1].(llms.TextContent)
-			if !util.HasChineseChar(txt.Text) {
-				txt = llms.TextContent{
-					Text: "使用中文, " + txt.Text,
-				}
-			}
-
 			ret = append(ret, llms.MessageContent{
 				Role:  llms.ChatMessageTypeHuman,
-				Parts: []llms.ContentPart{txt},
+				Parts: []llms.ContentPart{msg.Parts[leng-1].(llms.TextContent)},
 			})
 
 		case llms.ChatMessageTypeSystem:
@@ -121,8 +120,25 @@ func NormalPrompt(messages []llms.MessageContent) []llms.MessageContent {
 				Role:  llms.ChatMessageTypeHuman,
 				Parts: []llms.ContentPart{msg.Parts[leng-1]},
 			})
-		default:
 		}
+	}
+	ret = append(ret, llms.MessageContent{
+		Role: llms.ChatMessageTypeSystem,
+		Parts: []llms.ContentPart{llms.TextContent{
+			Text: "请使用中文回答",
+		}}})
+	return ret
+}
+
+// last system and the last human
+func CompletionPrompt(prompt string) []llms.MessageContent {
+	ret := []llms.MessageContent{
+		{
+			Role: llms.ChatMessageTypeHuman,
+			Parts: []llms.ContentPart{llms.TextContent{
+				Text: prompt,
+			}},
+		},
 	}
 	return ret
 }
