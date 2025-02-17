@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
-	"time"
 
+	"github.com/emirpasic/gods/queues/priorityqueue"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/yylt/gptmux/mux"
 	"github.com/yylt/gptmux/pkg"
@@ -86,7 +86,7 @@ func (c *Config) imageModel() string {
 type Merlin struct {
 	cfg *Config
 
-	instctrl *instCtrl
+	queue *priorityqueue.Queue
 }
 
 func NewMerlinIns(cfg *Config) *Merlin {
@@ -95,14 +95,19 @@ func NewMerlinIns(cfg *Config) *Merlin {
 		return nil
 	}
 	ml := &Merlin{
-		cfg: cfg,
+		cfg:   cfg,
+		queue: priorityqueue.NewWith(instCompare),
 	}
 	defaultClient = util.NewDebugHTTPClient(cfg.Proxy, cfg.Debug)
 
-	ml.instctrl = NewInstControl(time.Minute*55, ml, cfg.Users)
-	if ml.instctrl.Size() == 0 {
-		return nil
+	for _, user := range cfg.Users {
+		u := NewInstance(ml, user)
+		if u != nil {
+			klog.Infof("merlin instance %s created", u)
+			ml.queue.Enqueue(u)
+		}
 	}
+
 	return ml
 }
 
@@ -125,7 +130,7 @@ func (m *Merlin) Completion(ctx context.Context, prompt string, options ...llms.
 		o(opt)
 	}
 	defer util.PutBuf(buf)
-	err = m.chat(prompt, mux.TxtModel, func(resp *http.Response) error {
+	err = m.chat(prompt, mux.TxtModel, func(resp *http.Response, ins *instance) error {
 		var (
 			respData = &EventResp{}
 
@@ -145,6 +150,10 @@ func (m *Merlin) Completion(ctx context.Context, prompt string, options ...llms.
 			if err != nil {
 				klog.Warningf("parse event data failed: %v", err)
 				continue
+			}
+			if respData.Data.Usage.Limit != 0 {
+				ins.used = respData.Data.Usage.Used
+				ins.limit = respData.Data.Usage.Limit
 			}
 			ret = textProcess(respData)
 			if ret == nil {
@@ -178,7 +187,7 @@ func (m *Merlin) GenerateContent(ctx context.Context, messages []llms.MessageCon
 	}
 	prompt, model := mux.GeneraPrompt(messages)
 
-	err := m.chat(prompt, model, func(resp *http.Response) error {
+	err := m.chat(prompt, model, func(resp *http.Response, ins *instance) error {
 		var (
 			respData = &EventResp{}
 
@@ -198,6 +207,10 @@ func (m *Merlin) GenerateContent(ctx context.Context, messages []llms.MessageCon
 			if err != nil {
 				klog.Warningf("parse event data failed: %v", err)
 				continue
+			}
+			if respData.Data.Usage.Limit != 0 {
+				ins.used = respData.Data.Usage.Used
+				ins.limit = respData.Data.Usage.Limit
 			}
 			if model == mux.TxtModel {
 				ret = textProcess(respData)
@@ -233,44 +246,6 @@ func (m *Merlin) GenerateContent(ctx context.Context, messages []llms.MessageCon
 
 func (m *Merlin) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
 	return "", fmt.Errorf("not implement")
-}
-
-// check token or update
-func (m *Merlin) refresh(v *instance) error {
-	err := m.access(v)
-	if err == nil {
-		err = m.usage(v)
-	}
-	if err == nil {
-		klog.Infof("access success: %s", v)
-	}
-	return err
-}
-
-// update ins usage
-func (m *Merlin) usage(ins *instance) error {
-	var (
-		status = &UserResp{}
-		surl   = fmt.Sprintf("%s/status?firebaseToken=%s&from=DASHBOARD", m.cfg.Appurl, ins.idtoken)
-	)
-
-	resp, err := request(surl, "GET", nil, map[string]string{
-		"accept":        "*/*",
-		"Authorization": "Bearer " + ins.idtoken,
-	})
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	err = json.NewDecoder(resp.Body).Decode(status)
-	if err != nil {
-		return err
-	}
-
-	ins.used = status.Data.User.Used
-	ins.limit = status.Data.User.Limit
-
-	return nil
 }
 
 func (m *Merlin) access(ins *instance) error {
@@ -330,76 +305,59 @@ func (m *Merlin) access(ins *instance) error {
 	return nil
 }
 
-// check and refresh token
-func (m *Merlin) getInstance(least int) (inst *instance, err error) {
-	var (
-		failed []*instance
-	)
-	for {
-		inst, err = m.instctrl.Dequeue()
-		if err != nil {
-			klog.Errorf("merlin instance failed: %v", err)
-			continue
-		}
-		if m.usage(inst) != nil {
-			err = m.refresh(inst)
-			if err != nil {
-				klog.Errorf("merlin instance '%s' failed: %v", inst.user, err)
-				failed = append(failed, inst)
-				continue
-			}
-		}
-		break
-	}
-	for _, v := range failed {
-		m.instctrl.Eequeue(v)
-	}
-	return
-}
-
-func (m *Merlin) chat(prompt string, mode mux.ChatModel, fn func(*http.Response) error) error {
+func (m *Merlin) chat(prompt string, mode mux.ChatModel, fn func(*http.Response, *instance) error) error {
 
 	var (
-		url   string
-		body  map[string]any
-		least int
+		url  string
+		body map[string]any
 	)
 	switch mode {
 	case mux.TxtModel:
 		url = fmt.Sprintf("%s/thread/unified?version=1.1", m.cfg.Appurl)
 		body = chatBody(prompt, m.cfg.textModel())
-		least = 1
 	case mux.ImgModel:
 		url = fmt.Sprintf("%s/thread/image-generation", m.cfg.Appurl)
 		body = imageBody(prompt, m.cfg.imageModel())
-		least = 10
 	default:
 		return fmt.Errorf("not support prompt type '%s'", mode)
 	}
-	cu, err := m.getInstance(least)
-	if err != nil {
-		return err
+	cu, ok := m.queue.Dequeue()
+	if !ok {
+		return fmt.Errorf("%s is busy", m.Name())
 	}
+	ins := cu.(*instance)
+
 	defer func() {
-		m.usage(cu)
-		klog.Infof("merlin user(%s) used %d, limit %d", cu.user, cu.used, cu.limit)
-		m.instctrl.Eequeue(cu)
+		klog.Infof("merlin chat done, %s", ins)
+		m.queue.Enqueue(ins)
 	}()
 
 	bodystr, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("marshal body failed :%v", err)
 	}
-	resp, err := request(url, "post", bodystr, map[string]string{
+	sendheader := map[string]string{
 		"Accept":        "text/event-stream",
 		"Connection":    "keep-alive",
 		"content-type":  "application/json",
-		"Authorization": "Bearer " + cu.idtoken,
-	})
+		"Authorization": "Bearer " + ins.idtoken,
+	}
+	resp, err := request(url, "post", bodystr, sendheader)
 	if err != nil {
 		return err
 	}
-	return fn(resp)
+	if resp.StatusCode == http.StatusUnauthorized {
+		err = m.access(ins)
+		if err != nil {
+			return err
+		} else {
+			resp, err = request(url, "post", bodystr, sendheader)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return fn(resp, ins)
 }
 
 func request(address, method string, body []byte, headers map[string]string) (*http.Response, error) {
@@ -454,9 +412,6 @@ func imageProcess(er *EventResp) *pkg.BackResp {
 	}
 	switch er.Data.Type {
 	case string(system):
-		if er.Data.Setting.Id != "" || er.Data.Usage.Type != "" {
-			return nil
-		}
 		if len(er.Data.Attachs) != 0 && er.Data.Attachs[0].Url != "" {
 			return &pkg.BackResp{
 				Content: fmt.Sprintf("![](%s)", er.Data.Attachs[0].Url),

@@ -2,9 +2,7 @@ package merlin
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/emirpasic/gods/queues/priorityqueue"
 	"k8s.io/klog/v2"
 )
 
@@ -32,7 +30,7 @@ func (c *instance) DeepCopy() *instance {
 	}
 }
 func (c *instance) String() string {
-	return fmt.Sprintf("user: %s, used: %d, limit: %d", c.user, c.used, c.limit)
+	return fmt.Sprintf("user: %s(%d/%d)", c.user, c.used, c.limit)
 }
 
 func instCompare(a, b interface{}) int {
@@ -46,75 +44,15 @@ func instCompare(a, b interface{}) int {
 	return -1
 }
 
-type instCtrl struct {
-	interval time.Duration
-
-	ml *Merlin
-
-	queue *priorityqueue.Queue
-}
-
-func NewInstControl(d time.Duration, ml *Merlin, user []*user) *instCtrl {
-	queue := priorityqueue.NewWith(instCompare)
-	for _, u := range user {
-		in := &instance{
-			user:     u.User,
-			password: u.Password,
-		}
-		err := ml.refresh(in)
-		if err != nil {
-			klog.Warningf("not valid user(%s), failed: %v", in.user, err)
-			continue
-		}
-		queue.Enqueue(in)
+func NewInstance(m *Merlin, u *user) *instance {
+	ins := &instance{
+		user:     u.User,
+		password: u.Password,
 	}
-	ic := &instCtrl{
-		interval: d,
-		ml:       ml,
-		queue:    queue,
+	err := m.access(ins)
+	if err != nil {
+		klog.Errorf("access user %s, error: %v", ins, err)
+		return nil
 	}
-	if queue.Size() != 0 {
-		go ic.run()
-	}
-	return ic
-}
-
-func (ic *instCtrl) Size() int {
-	return ic.queue.Size()
-}
-
-func (ic *instCtrl) Eequeue(m *instance) {
-	ic.queue.Enqueue(m)
-}
-
-func (ic *instCtrl) Dequeue() (*instance, error) {
-
-	v, ok := ic.queue.Dequeue()
-	if !ok {
-		return nil, fmt.Errorf("no instance")
-	}
-	return v.(*instance), nil
-}
-
-func (ic *instCtrl) run() {
-	var interval = ic.interval
-	for {
-		iter := ic.queue.Iterator()
-		for iter.Next() {
-			v, ok := iter.Value().(*instance)
-			if !ok {
-				continue
-			}
-			if v.accesstoken != "" && ic.ml.usage(v) == nil {
-				klog.Infof("user(%s/%s) limit %d used %d.", v.user, v.password, v.limit, v.used)
-				continue
-			}
-			err := ic.ml.refresh(v)
-			if err != nil {
-				klog.Errorf("refresh failed: %v", err)
-			}
-		}
-
-		<-time.NewTimer(interval).C
-	}
+	return ins
 }

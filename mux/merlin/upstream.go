@@ -10,6 +10,8 @@ const (
 	chunk  eventType = "CHUNK"
 	system eventType = "SYSTEM"
 	done   eventType = "DONE"
+
+	usageMerlin string = "merlin"
 )
 
 type authResp struct {
@@ -23,36 +25,33 @@ type UserResp struct {
 	Data   *UserData `json:"data"`
 }
 
+type useage struct {
+	Used  int `json:"usage"`
+	Limit int `json:"limit"`
+}
 type EventResp struct {
 	Status string     `json:"status"`
 	Data   *eventData `json:"data"`
 }
 
 type UserData struct {
-	User struct {
-		Used  int    `json:"used"`
-		Type  string `json:"type"`
-		Limit int    `json:"limit"`
-	} `json:"user"`
+	Feature struct {
+		Merlin useage `json:"merlin"`
+	} `json:"features,omitempty"`
 }
 
 type eventData struct {
 	Content string `json:"content,omitempty"`
+	Type    string `json:"eventType"`
 	Attachs []struct {
 		Id   string `json:"id,omitempty"`
 		Type string `json:"type,omitempty"`
 		Url  string `json:"url"`
 	} `json:"attachments,omitempty"`
-	Type  string `json:"eventType"`
 	Usage struct {
-		Used  int    `json:"used"`
-		Type  string `json:"type"`
-		Limit int    `json:"limit"`
+		Used  int `json:"used"`
+		Limit int `json:"limit"`
 	} `json:"usage,omitempty"`
-	Setting struct {
-		Id string `json:"chatId,omitempty"`
-		Ts string `json:"timestamp,omitempty"`
-	} `json:"settings,omitempty"`
 }
 
 type TokenResp struct {

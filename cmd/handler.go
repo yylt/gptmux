@@ -182,7 +182,7 @@ func (ca *Controller) V1ChatCompletionsPost(c *gin.Context) {
 		reterrs []error
 	)
 	if ca.debug {
-		klog.Infof("request body: %v", body)
+		klog.Infof("request body: %q", body)
 	}
 	buf := util.GetBuf()
 	defer func() {
