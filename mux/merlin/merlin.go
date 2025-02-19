@@ -30,6 +30,8 @@ var (
 
 	defaultClient *http.Client
 
+	errAuth = errors.New("unauth")
+
 	name = "merlin"
 )
 
@@ -343,19 +345,15 @@ func (m *Merlin) chat(prompt string, mode mux.ChatModel, fn func(*http.Response,
 		"Authorization": "Bearer " + ins.idtoken,
 	}
 	resp, err := request(url, "post", bodystr, sendheader)
+	if err != nil && errors.Is(err, errAuth) {
+		err = m.access(ins)
+		if err == nil {
+			sendheader["Authorization"] = "Bearer " + ins.idtoken
+			resp, err = request(url, "post", bodystr, sendheader)
+		}
+	}
 	if err != nil {
 		return err
-	}
-	if resp.StatusCode == http.StatusUnauthorized {
-		err = m.access(ins)
-		if err != nil {
-			return err
-		} else {
-			resp, err = request(url, "post", bodystr, sendheader)
-			if err != nil {
-				return err
-			}
-		}
 	}
 	return fn(resp, ins)
 }
@@ -384,7 +382,11 @@ func request(address, method string, body []byte, headers map[string]string) (*h
 	}
 	if !util.IsHttp20xCode(resp.StatusCode) {
 		resp.Body.Close()
-		return nil, fmt.Errorf("request '%s' failed: %v, code: %d", address, http.StatusText(resp.StatusCode), resp.StatusCode)
+		klog.Errorf("request '%s' failed: %v, code: %d", address, http.StatusText(resp.StatusCode), resp.StatusCode)
+		if resp.StatusCode == http.StatusUnauthorized {
+			return nil, errAuth
+		}
+		return nil, fmt.Errorf("request '%s' code: %s", address, http.StatusText(resp.StatusCode))
 	}
 	return resp, nil
 }

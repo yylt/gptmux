@@ -133,7 +133,6 @@ func (d *Openai) Completion(ctx context.Context, prompt string, options ...llms.
 		}
 		err = json.Unmarshal(bytes.TrimPrefix(line, util.HeaderData), &respData)
 		if err != nil {
-			klog.Warningf("parse event data failed: %v", err)
 			continue
 		}
 		for _, choci := range respData.Choices {
@@ -202,7 +201,6 @@ func (d *Openai) GenerateContent(ctx context.Context, messages []llms.MessageCon
 		}
 		err = json.Unmarshal(bytes.TrimPrefix(line, util.HeaderData), &respData)
 		if err != nil {
-			klog.Warningf("parse event data failed: %v", err)
 			continue
 		}
 		for _, choci := range respData.Choices {
@@ -223,7 +221,9 @@ func (d *Openai) GenerateContent(ctx context.Context, messages []llms.MessageCon
 		}
 	}
 	cancle()
-	opt.StreamingFunc(bctx, nil)
+	if opt.StreamingFunc != nil {
+		opt.StreamingFunc(bctx, nil)
+	}
 	return ret, nil
 }
 func (d *Openai) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
