@@ -7,15 +7,15 @@ import time
 import json
 from typing import List, Dict, Optional, Any, Generator
 import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
 import uvicorn
 from rkllm import llm
 
 global_rkllm_model = None
-
-app = FastAPI()
 
 # Global model configuration
 model_config = {
@@ -63,90 +63,40 @@ async def lifespan(app: FastAPI):
         global_rkllm_model = None
         print("Global RKLLM model resources released successfully")
 
+async def cleanup_task(request_id: str):
+    global_rkllm_model.stop()
+    llm.callback_data_store.pop(request_id, None)
+
+app = FastAPI(lifespan=lifespan)
+lock = asyncio.Lock()
 
 # 修改路由处理函数，使用全局模型实例
 @app.post("/rkllm_chat")
 async def rkllm_chat(chat_request: ChatRequest, background_tasks: BackgroundTasks, request: Request):
     global global_rkllm_model
-    
-    request_id = str(id(request))
-    print(f"Processing request {request_id}")
-    
-    # 初始化此请求的回调数据
-    llm.callback_data_store[request_id] = llm.CallbackData()
-    
-    # 使用全局模型实例，不再为每个请求创建新实例
-    if not global_rkllm_model:
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Model not initialized"}
-        )
-    
-    # 注册清理函数，仅删除回调数据，而不是释放模型
-    background_tasks.add_task(lambda: llm.callback_data_store.pop(request_id, None))
-    
-    now = int(time.time())
-    # 定义响应格式
-    rkllm_responses = {
-        "id": "rkllm_chat",
-        "object": "rkllm_chat",
-        "created": now,
-        "choices": [],
-        "usage": {
-            "prompt_tokens": None,
-            "completion_tokens": None,
-            "total_tokens": None
-        }
-    }
-    
-    if not chat_request.stream:
-        # 处理非流式请求
-        for index, message in enumerate(chat_request.messages):
-            input_prompt = message.content
-            rkllm_output = ""
-            
-            # 创建模型推理线程，传入请求ID
-            model_thread = threading.Thread(
-                target=global_rkllm_model.run, 
-                args=(input_prompt, request_id)
-            )
-            model_thread.start()
-            
-            # 等待模型完成运行
-            model_thread_finished = False
-            while not model_thread_finished:
-                while len(llm.callback_data_store[request_id].text) > 0:
-                    rkllm_output += llm.callback_data_store[request_id].text.pop(0)
-                    await asyncio.sleep(0.005)
-                
-                model_thread.join(timeout=0.005)
-                model_thread_finished = not model_thread.is_alive()
-            
-            rkllm_responses["choices"].append({
-                "index": index,
-                "message": {
-                    "role": "assistant",
-                    "content": rkllm_output,
-                },
-                "logprobs": None,
-                "finish_reason": "stop"
-            })
+    global lock
+    if lock.locked():
+        raise HTTPException(status_code=500, detail="资源繁忙，请稍后重试")
+
+    async with lock:
+        request_id = str(id(request))
         
-        return JSONResponse(content=rkllm_responses)
-    else:
-        # 处理流式请求 (streaming)
+        llm.callback_data_store[request_id] = llm.CallbackData()
+        background_tasks.add_task(cleanup_task, request_id)
+        
+        now = int(time.time())
+        
+        # only streaming
         async def generate_stream():
             for index, message in enumerate(chat_request.messages):
                 input_prompt = message.content
                 
-                # 创建模型推理线程，传入请求ID
                 model_thread = threading.Thread(
                     target=global_rkllm_model.run, 
                     args=(input_prompt, request_id)
                 )
                 model_thread.start()
                 
-                # 流式输出结果
                 model_thread_finished = False
                 while not model_thread_finished:
                     while len(llm.callback_data_store[request_id].text) > 0:
@@ -162,19 +112,16 @@ async def rkllm_chat(chat_request: ChatRequest, background_tasks: BackgroundTask
                                     "role": "assistant",
                                     "content": rkllm_output,
                                 },
-                                "logprobs": None,
                                 "finish_reason": "stop" if llm.callback_data_store[request_id].state == llm.LLMCallState.RKLLM_RUN_FINISH else None,
-                            }],
-                            "usage": None
+                            }]
                         }
                         
-                        yield f"data: {json.dumps(stream_response)}\n\n"
+                        yield f"data: {json.dumps(stream_response, ensure_ascii=False)}\n\n"
                     
                     await asyncio.sleep(0.005)
-                    model_thread.join(timeout=0.005)
                     model_thread_finished = not model_thread.is_alive()
                 
-                # 发送最终的空消息以表示完成
+                # 完成
                 yield f"data: [DONE]\n\n"
         
         return StreamingResponse(

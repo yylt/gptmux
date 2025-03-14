@@ -8,7 +8,7 @@ import time
 # Create a dictionary to store callback data for each request
 callback_data_store = {}
 
-PROMPT_TEXT_PREFIX = "<|im_start|>system You are a helpful assistant. <|im_end|> <|im_start|>user"
+PROMPT_TEXT_PREFIX = "<|im_start|>你是聪明的助手. <|im_end|> <|im_start|>user"
 PROMPT_TEXT_POSTFIX = "<|im_end|><|im_start|>assistant"
 
 # Define the structures from the library
@@ -231,9 +231,11 @@ class RKLLM(object):
         self.rkllm_init.restype = ctypes.c_int
         
         self.global_callback = callback_type(self.global_callback_handler)
-        ret = self.rkllm_init(ctypes.byref(self.handle), ctypes.byref(rkllm_param), self.global_callback)
-        print(f"RKLLM init ret: {ret}")
-            #raise Exception("Failed to initialize RKLLM")
+        self.rkllm_init(ctypes.byref(self.handle), ctypes.byref(rkllm_param), self.global_callback)
+        
+        self.rkllm_stop = self.rkllm_lib.rkllm_abort
+        self.rkllm_stop.argtypes = [RKLLM_Handle_t]
+        self.rkllm_stop.restype = ctypes.c_int
 
         self.rkllm_run = self.rkllm_lib.rkllm_run
         self.rkllm_run.argtypes = [RKLLM_Handle_t, ctypes.POINTER(RKLLMInput), ctypes.POINTER(RKLLMInferParam), ctypes.c_void_p]
@@ -270,7 +272,9 @@ class RKLLM(object):
             rkllm_load_prompt_cache.argtypes = [RKLLM_Handle_t, ctypes.c_char_p]
             rkllm_load_prompt_cache.restype = ctypes.c_int
             rkllm_load_prompt_cache(self.handle, ctypes.c_char_p((prompt_cache_path).encode('utf-8')))
-    
+                
+        self.is_running = False
+
     # 根据当前请求ID路由到正确的回调处理
     def global_callback_handler(self, result, userdata, state):
         # 获取当前活动请求ID（通过线程本地存储或上下文管理设置）
@@ -295,12 +299,22 @@ class RKLLM(object):
         ctypes.memset(ctypes.byref(rkllm_infer_params), 0, ctypes.sizeof(RKLLMInferParam))
         rkllm_infer_params.mode = RKLLMInferMode.RKLLM_INFER_GENERATE
         rkllm_infer_params.lora_params = ctypes.byref(rkllm_lora_params) if rkllm_lora_params else None
-
+        # 标记模型是否正在运行
+        self.is_running = True
         rkllm_input = RKLLMInput()
         rkllm_input.input_mode = RKLLMInputMode.RKLLM_INPUT_PROMPT
         rkllm_input.input_data.prompt_input = ctypes.c_char_p((PROMPT_TEXT_PREFIX + prompt + PROMPT_TEXT_POSTFIX).encode('utf-8'))
         self.rkllm_run(self.handle, ctypes.byref(rkllm_input), ctypes.byref(rkllm_infer_params), None)
+              
+        self.is_running = False
         return
+
+    def stop(self):
+        """停止当前的模型推理"""
+        if self.is_running:
+            ret = self.rkllm_stop(self.handle)
+            return ret
+        return 0
 
     def release(self):
         self.rkllm_destroy(self.handle)
