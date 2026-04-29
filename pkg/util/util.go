@@ -95,3 +95,11 @@ func Print(b io.Reader) {
 	defer PutBuf(buf)
 	klog.Infof("%s", buf.String())
 }
+
+func PtrBool(b bool) *bool {
+	return &b
+}
+
+func StringPtr(s string) *string {
+	return &s
+}
