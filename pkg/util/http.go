@@ -12,7 +12,7 @@ type logTransport struct {
 	debug bool
 }
 
-func NewDebugHTTPClient(proxy string, debug bool) *http.Client {
+func NewDebugHTTPClient(proxy string, debug bool) (*http.Client, error) {
 	var (
 		tr = &http.Transport{
 			ForceAttemptHTTP2:     true,
@@ -25,7 +25,7 @@ func NewDebugHTTPClient(proxy string, debug bool) *http.Client {
 	if proxy != "" {
 		proxy, err := ParseUrl(proxy)
 		if err != nil {
-			return nil
+			return nil, err
 		}
 		tr.Proxy = http.ProxyURL(proxy)
 	}
@@ -34,7 +34,7 @@ func NewDebugHTTPClient(proxy string, debug bool) *http.Client {
 			tr:    tr,
 			debug: debug,
 		},
-	}
+	}, nil
 }
 
 // RoundTrip logs the request and response with full contents using httputil.DumpRequest and httputil.DumpResponse.
