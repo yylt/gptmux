@@ -3,20 +3,16 @@ package main
 import (
 	"context"
 	"flag"
+	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
+	"time"
 
-	"github.com/gin-gonic/gin"
-	openapi "github.com/yylt/gptmux/api/go"
-	"github.com/yylt/gptmux/mux"
-	"github.com/yylt/gptmux/mux/claude"
-	"github.com/yylt/gptmux/mux/deepseek"
-	"github.com/yylt/gptmux/mux/merlin"
-	"github.com/yylt/gptmux/mux/ollama"
-	"github.com/yylt/gptmux/mux/openai"
-	"github.com/yylt/gptmux/mux/rkllm"
-	"github.com/yylt/gptmux/mux/zhipu"
+	"github.com/yylt/gptmux/pkg/mux"
+	"github.com/yylt/gptmux/pkg/mux/merlin"
+	"github.com/yylt/gptmux/pkg/serve"
 
 	"k8s.io/klog/v2"
 )
@@ -25,6 +21,7 @@ func main() {
 	klog.InitFlags(flag.CommandLine)
 	cp := flag.String("config", "", "config file path")
 	flag.Parse()
+	logBuildInfo()
 	if cp == nil || *cp == "" {
 		panic("config must set")
 	}
@@ -35,51 +32,64 @@ func main() {
 	ctx := SetupSignalHandler()
 
 	var ms []mux.Model
-	ds := deepseek.New(&cfg.Deepseek)
-	if ds != nil {
-		ms = append(ms, ds)
-	}
 	ml := merlin.NewMerlinIns(&cfg.Merlin)
 	if ml != nil {
 		ms = append(ms, ml)
 	}
-	zp := zhipu.New(&cfg.Zhipu)
-	if zp != nil {
-		ms = append(ms, zp)
-	}
-	apidp := openai.New(ctx, &cfg.DeepseekApi)
-	if apidp != nil {
-		ms = append(ms, apidp)
-	}
-	ca := claude.New(ctx, &cfg.Claude)
-	if ca != nil {
-		ms = append(ms, ca)
-	}
-	rk := rkllm.New(&cfg.Rkllm)
-	if rk != nil {
-		ms = append(ms, rk)
+	ctl := serve.NewController(ctx, cfg.Debug, *cp, func() error {
+		return cfg.SaveConfig(*cp)
+	}, ms...)
+
+	srv := &http.Server{
+		Addr:    cfg.Addr,
+		Handler: ctl.Handler(),
 	}
 
-	ollm := ollama.New(ctx, &cfg.Ollama)
-	if ollm != nil {
-		ms = append(ms, ollm)
+	go func() {
+		klog.Infof("listen on %s", cfg.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			klog.Exitf("listen failed: %v", err)
+		}
+	}()
 
+	<-ctx.Done()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		klog.Errorf("shutdown failed: %v", err)
 	}
-	sili := openai.New(ctx, &cfg.Silicon)
-	if sili != nil {
-		ms = append(ms, sili)
-	}
-	chat := NewController(ctx, cfg.Debug, ms...)
+}
 
-	muxhandler := openapi.ApiHandleFunctions{
-		ChatAPI:        chat,
-		CompletionsAPI: chat,
-		ModelsAPI:      chat,
+func logBuildInfo() {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		klog.Info("build info unavailable")
+		return
 	}
-	e := gin.Default()
-	openapi.NewRouterWithGinEngine(e, muxhandler)
 
-	e.Run(cfg.Addr)
+	settings := map[string]string{}
+	for _, s := range bi.Settings {
+		settings[s.Key] = s.Value
+	}
+
+	klog.Infof(
+		"build info: module=%s version=%s go=%s commit=%s time=%s modified=%s",
+		bi.Main.Path,
+		bi.Main.Version,
+		bi.GoVersion,
+		settings["vcs.revision"],
+		settings["vcs.time"],
+		settings["vcs.modified"],
+	)
+	if bi.Main.Sum != "" {
+		klog.Infof("build checksum: %s", bi.Main.Sum)
+	}
+	for _, dep := range bi.Deps {
+		if dep.Path == "" {
+			continue
+		}
+		klog.V(2).Infof("dep: %s@%s", dep.Path, dep.Version)
+	}
 }
 
 func SetupSignalHandler() context.Context {
@@ -90,7 +100,8 @@ func SetupSignalHandler() context.Context {
 	go func() {
 		<-c
 		cancel()
-		os.Exit(0)
+		<-c
+		os.Exit(1)
 	}()
 
 	return ctx
