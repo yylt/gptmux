@@ -8,19 +8,20 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"sync"
 
 	"github.com/emirpasic/gods/queues/priorityqueue"
 	"github.com/tmc/langchaingo/llms"
-	"github.com/yylt/gptmux/mux"
-	"github.com/yylt/gptmux/pkg"
+	"github.com/yylt/gptmux/pkg/mux"
+	"github.com/yylt/gptmux/pkg/response"
 	"github.com/yylt/gptmux/pkg/util"
 	"k8s.io/klog/v2"
 )
 
 var _ mux.Model = &Merlin{}
 
-type modelfn func(er *EventResp) *pkg.BackResp
+type modelfn func(er *EventResp) *response.BackendData
 
 var (
 	HeaderDefault = map[string]string{
@@ -88,7 +89,16 @@ func (c *Config) imageModel() string {
 type Merlin struct {
 	cfg *Config
 
-	queue *priorityqueue.Queue
+	mu     sync.Mutex
+	queue  *priorityqueue.Queue
+	users  map[string]*instance
+	active map[string]int
+}
+
+type UserInfo struct {
+	Name  string `json:"name" yaml:"name"`
+	Used  int    `json:"used,omitempty" yaml:"-"`
+	Limit int    `json:"limit,omitempty" yaml:"-"`
 }
 
 func NewMerlinIns(cfg *Config) *Merlin {
@@ -97,8 +107,10 @@ func NewMerlinIns(cfg *Config) *Merlin {
 		return nil
 	}
 	ml := &Merlin{
-		cfg:   cfg,
-		queue: priorityqueue.NewWith(instCompare),
+		cfg:    cfg,
+		queue:  priorityqueue.NewWith(instCompare),
+		users:  make(map[string]*instance, len(cfg.Users)),
+		active: make(map[string]int, len(cfg.Users)),
 	}
 	var err error
 	defaultClient, err = util.NewDebugHTTPClient(cfg.Proxy, cfg.Debug)
@@ -110,6 +122,7 @@ func NewMerlinIns(cfg *Config) *Merlin {
 		u := NewInstance(ml, user)
 		if u != nil {
 			klog.Infof("merlin instance %s created", u)
+			ml.users[u.user] = u
 			ml.queue.Enqueue(u)
 		}
 	}
@@ -123,6 +136,112 @@ func (m *Merlin) Name() string {
 
 func (m *Merlin) Index() int {
 	return m.cfg.Index
+}
+
+func (m *Merlin) ListUsers() []UserInfo {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ret := make([]UserInfo, 0, len(m.users))
+	for _, cfgUser := range m.cfg.Users {
+		if cfgUser == nil || cfgUser.User == "" {
+			continue
+		}
+		info := UserInfo{Name: cfgUser.User}
+		if ins, ok := m.users[cfgUser.User]; ok {
+			info.Used = ins.used
+			info.Limit = ins.limit
+		}
+		ret = append(ret, info)
+	}
+	sort.Slice(ret, func(i, j int) bool {
+		return ret[i].Name < ret[j].Name
+	})
+	return ret
+}
+
+func (m *Merlin) AddUser(username, password string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if username == "" || password == "" {
+		return fmt.Errorf("name and password are required")
+	}
+	if _, ok := m.users[username]; ok {
+		return fmt.Errorf("user %q already exists", username)
+	}
+	ins := NewInstance(m, &user{User: username, Password: password})
+	if ins == nil {
+		return fmt.Errorf("create merlin instance failed for %q", username)
+	}
+	m.cfg.Users = append(m.cfg.Users, &user{User: username, Password: password})
+	m.users[username] = ins
+	m.rebuildQueueLocked()
+	return nil
+}
+
+func (m *Merlin) UpdateUser(username, password string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if username == "" || password == "" {
+		return fmt.Errorf("name and password are required")
+	}
+	if m.active[username] > 0 {
+		return fmt.Errorf("user %q is busy", username)
+	}
+	idx := -1
+	for i, u := range m.cfg.Users {
+		if u != nil && u.User == username {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return fmt.Errorf("user %q not found", username)
+	}
+	ins := NewInstance(m, &user{User: username, Password: password})
+	if ins == nil {
+		return fmt.Errorf("update merlin instance failed for %q", username)
+	}
+	m.cfg.Users[idx].Password = password
+	m.users[username] = ins
+	m.rebuildQueueLocked()
+	return nil
+}
+
+func (m *Merlin) DeleteUser(username string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if username == "" {
+		return fmt.Errorf("name is required")
+	}
+	if m.active[username] > 0 {
+		return fmt.Errorf("user %q is busy", username)
+	}
+	if _, ok := m.users[username]; !ok {
+		return fmt.Errorf("user %q not found", username)
+	}
+	delete(m.users, username)
+	delete(m.active, username)
+	users := make([]*user, 0, len(m.cfg.Users))
+	for _, u := range m.cfg.Users {
+		if u == nil || u.User == username {
+			continue
+		}
+		users = append(users, u)
+	}
+	m.cfg.Users = users
+	m.rebuildQueueLocked()
+	return nil
+}
+
+func (m *Merlin) rebuildQueueLocked() {
+	queue := priorityqueue.NewWith(instCompare)
+	for _, ins := range m.users {
+		if m.active[ins.user] > 0 {
+			continue
+		}
+		queue.Enqueue(ins)
+	}
+	m.queue = queue
 }
 
 func (m *Merlin) Completion(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
@@ -140,7 +259,7 @@ func (m *Merlin) Completion(ctx context.Context, prompt string, options ...llms.
 		var (
 			respData = &EventResp{}
 
-			ret  *pkg.BackResp
+			ret  *response.BackendData
 			err  error
 			body = resp.Body
 			once sync.Once
@@ -197,7 +316,7 @@ func (m *Merlin) GenerateContent(ctx context.Context, messages []llms.MessageCon
 		var (
 			respData = &EventResp{}
 
-			ret  *pkg.BackResp
+			ret  *response.BackendData
 			err  error
 			body = resp.Body
 			once sync.Once
@@ -327,15 +446,26 @@ func (m *Merlin) chat(prompt string, mode mux.ChatModel, fn func(*http.Response,
 	default:
 		return fmt.Errorf("not support prompt type '%s'", mode)
 	}
+	m.mu.Lock()
 	cu, ok := m.queue.Dequeue()
 	if !ok {
+		m.mu.Unlock()
 		return fmt.Errorf("%s is busy", m.Name())
 	}
 	ins := cu.(*instance)
+	m.active[ins.user]++
+	m.mu.Unlock()
 
 	defer func() {
 		klog.Infof("merlin chat done, %s", ins)
-		m.queue.Enqueue(ins)
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if m.active[ins.user] > 0 {
+			m.active[ins.user]--
+		}
+		if _, ok := m.users[ins.user]; ok {
+			m.queue.Enqueue(ins)
+		}
 	}()
 
 	bodystr, err := json.Marshal(body)
@@ -395,31 +525,31 @@ func request(address, method string, body []byte, headers map[string]string) (*h
 	return resp, nil
 }
 
-func textProcess(er *EventResp) *pkg.BackResp {
+func textProcess(er *EventResp) *response.BackendData {
 	if er == nil || er.Data == nil {
 		return nil
 	}
 	switch er.Data.Type {
 	case string(chunk):
-		return &pkg.BackResp{
+		return &response.BackendData{
 			Content: er.Data.Content,
 		}
 	case string(done):
-		return &pkg.BackResp{
+		return &response.BackendData{
 			Err: errors.New("done"),
 		}
 	}
 	return nil
 }
 
-func imageProcess(er *EventResp) *pkg.BackResp {
+func imageProcess(er *EventResp) *response.BackendData {
 	if er == nil || er.Data == nil {
 		return nil
 	}
 	switch er.Data.Type {
 	case string(system):
 		if len(er.Data.Attachs) != 0 && er.Data.Attachs[0].Url != "" {
-			return &pkg.BackResp{
+			return &response.BackendData{
 				Content: fmt.Sprintf("![](%s)", er.Data.Attachs[0].Url),
 			}
 		}
